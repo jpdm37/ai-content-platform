@@ -7,7 +7,7 @@ Endpoints for tracking and analyzing content performance.
 
 from typing import Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -50,6 +50,7 @@ class OverviewResponse(BaseModel):
 @router.post("/sync")
 @limiter.limit("5/minute")
 async def sync_metrics(
+    request: Request,
     background_tasks: BackgroundTasks,
     platform: Optional[str] = None,
     current_user: User = Depends(get_current_user),
