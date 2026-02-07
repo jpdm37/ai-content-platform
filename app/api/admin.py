@@ -383,8 +383,8 @@ class AdminSetupRequest(AdminCreateRequest):
 @router.post("/setup")
 @limiter.limit("3/hour")  # Strict rate limiting on setup
 async def initial_setup(
-    http_request: Request,
-    request: AdminSetupRequest,
+    request: Request,
+    setup_data: AdminSetupRequest,
     db: Session = Depends(get_db)
 ):
     """
@@ -408,25 +408,25 @@ async def initial_setup(
         )
     
     # Check for setup token if configured
-    setup_token = getattr(settings, 'admin_setup_token', None)
-    if setup_token and setup_token.strip():
-        if not request.setup_token:
-            raise HTTPException(
-                status_code=403,
-                detail="Setup token required. Include 'setup_token' in request body."
-            )
-        if request.setup_token != setup_token:
-            raise HTTPException(
-                status_code=403,
-                detail="Invalid setup token."
-            )
-    
-    admin = create_initial_superadmin(
-        db=db,
-        email=request.email,
-        password=request.password,
-        name=request.name
-    )
+setup_token = getattr(settings, 'admin_setup_token', None)
+if setup_token and setup_token.strip():
+    if not setup_data.setup_token:
+        raise HTTPException(
+            status_code=403,
+            detail="Setup token required. Include 'setup_token' in request body."
+        )
+    if setup_data.setup_token != setup_token:
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid setup token."
+        )
+
+admin = create_initial_superadmin(
+    db=db,
+    email=setup_data.email,
+    password=setup_data.password,
+    name=setup_data.name
+)
     
     if not admin:
         raise HTTPException(status_code=400, detail="Failed to create admin")
