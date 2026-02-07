@@ -314,3 +314,6 @@ async def get_content_generator(db: Session) -> ContentGeneratorService:
         settings.openai_api_key, 
         settings.replicate_api_token
     )
+
+# Alias for compatibility
+ContentGenerator = ContentGeneratorService
