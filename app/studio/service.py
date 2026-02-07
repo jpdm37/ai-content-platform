@@ -19,7 +19,7 @@ from app.studio.models import (
 )
 from app.models.models import Brand
 from app.lora.models import LoraModel
-from app.services.generator import ContentGenerator
+from app.services.generator import ContentGeneratorService
 from app.video.service import VideoGenerationService
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,11 @@ class ContentStudioService:
     def __init__(self, db: Session):
         self.db = db
         self.openai = AsyncOpenAI(api_key=settings.openai_api_key)
-        self.content_generator = ContentGenerator()
+        self.content_generator = ContentGeneratorService(
+            db, 
+            settings.openai_api_key, 
+            settings.replicate_api_token
+        )
     
     # ==================== Project Management ====================
     

@@ -234,7 +234,7 @@ class Trend(Base):
     description = Column(Text, nullable=True)
     category = Column(String(100), nullable=True)
     rank = Column(Integer, nullable=True)
-    metadata = Column(JSON, nullable=True)
+    trend_metadata = Column(JSON, nullable=True)  # Renamed from 'metadata' (reserved word)
     fetched_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=True)
 
@@ -313,7 +313,7 @@ class UsageRecord(Base):
     usage_type = Column(String(50), nullable=False)
     quantity = Column(Integer, default=1)
     cost_credits = Column(Float, default=0)
-    metadata = Column(JSON, nullable=True)
+    usage_metadata = Column(JSON, nullable=True)  # Renamed from 'metadata' (reserved word)
     
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -692,3 +692,6 @@ if __name__ == "__main__":
         print("  drop   - Drop all database tables")
         print("  seed   - Seed default data")
         print("  setup  - Create tables and seed data")
+
+# Alias for compatibility
+create_tables = create_all_tables

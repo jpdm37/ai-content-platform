@@ -25,8 +25,9 @@ redis==5.0.1
 
 # Utilities
 python-dotenv==1.0.1
-pydantic==2.6.1
-pydantic-settings==2.1.0
+pydantic[email]>=2.6.0,<3.0.0
+pydantic-settings>=2.1.0,<3.0.0
+email-validator>=2.0.0
 
 # Image processing
 Pillow==10.2.0
@@ -51,8 +52,8 @@ stripe==8.4.0
 
 # Social Media
 tweepy==4.14.0
-instagrapi==2.0.0
-python-linkedin-v2==0.9.3
+# instagrapi removed - has pydantic 1.x conflict, use direct API calls instead
+python-linkedin-v2==0.9.4
 
 # Scheduling
 apscheduler==3.10.4

@@ -13,7 +13,7 @@ from app.admin.models import AdminUser, AdminRole, AuditLog, SystemSetting, DEFA
 from app.models.user import User
 from app.models.models import Brand, GeneratedContent
 from app.video.models import GeneratedVideo
-from app.social.models import SocialPost
+from app.social.models import ScheduledSocialPost as SocialPost  # Alias for compatibility
 from app.billing.models import Subscription, Payment
 from app.auth.security import get_password_hash, verify_password, create_access_token
 

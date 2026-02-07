@@ -205,8 +205,8 @@ class UsageRecord(Base):
     # Cost tracking
     cost_credits = Column(Integer, default=1)  # Internal credit cost
     
-    # Metadata
-    metadata = Column(JSON, nullable=True)
+    # Extra data (renamed from 'metadata' - reserved word in SQLAlchemy)
+    usage_metadata = Column(JSON, nullable=True)
     
     # Timestamp
     created_at = Column(DateTime, default=datetime.utcnow)

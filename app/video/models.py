@@ -105,8 +105,8 @@ class GeneratedVideo(Base):
     video_cost_usd = Column(Float, default=0.0)
     total_cost_usd = Column(Float, default=0.0)
     
-    # Metadata
-    metadata = Column(JSON, nullable=True)
+    # Extra data (renamed from 'metadata' - reserved word in SQLAlchemy)
+    video_metadata = Column(JSON, nullable=True)
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
