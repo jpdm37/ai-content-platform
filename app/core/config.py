@@ -19,7 +19,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://localhost/ai_content"
     
     # Redis
-    redis_url: str = "redis://localhost:6379/0"
+    # Redis (optional - leave empty to use in-memory rate limiting)
+    redis_url: Optional[str] = None
     
     # OpenAI
     openai_api_key: str = ""
