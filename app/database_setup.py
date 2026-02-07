@@ -694,4 +694,4 @@ if __name__ == "__main__":
         print("  setup  - Create tables and seed data")
 
 # Alias for compatibility
-   create_tables = create_all_tables
+create_tables = create_all_tables
