@@ -374,7 +374,6 @@ async def get_audit_logs(
 
 
 # ============ Initial Setup ============
-
 class AdminSetupRequest(AdminCreateRequest):
     """Extended request with optional setup token"""
     setup_token: Optional[str] = None
@@ -408,25 +407,25 @@ async def initial_setup(
         )
     
     # Check for setup token if configured
-setup_token = getattr(settings, 'admin_setup_token', None)
-if setup_token and setup_token.strip():
-    if not setup_data.setup_token:
-        raise HTTPException(
-            status_code=403,
-            detail="Setup token required. Include 'setup_token' in request body."
-        )
-    if setup_data.setup_token != setup_token:
-        raise HTTPException(
-            status_code=403,
-            detail="Invalid setup token."
-        )
-
-admin = create_initial_superadmin(
-    db=db,
-    email=setup_data.email,
-    password=setup_data.password,
-    name=setup_data.name
-)
+    setup_token = getattr(settings, 'admin_setup_token', None)
+    if setup_token and setup_token.strip():
+        if not setup_data.setup_token:
+            raise HTTPException(
+                status_code=403,
+                detail="Setup token required. Include 'setup_token' in request body."
+            )
+        if setup_data.setup_token != setup_token:
+            raise HTTPException(
+                status_code=403,
+                detail="Invalid setup token."
+            )
+    
+    admin = create_initial_superadmin(
+        db=db,
+        email=setup_data.email,
+        password=setup_data.password,
+        name=setup_data.name
+    )
     
     if not admin:
         raise HTTPException(status_code=400, detail="Failed to create admin")
