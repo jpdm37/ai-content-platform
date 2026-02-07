@@ -57,3 +57,10 @@ python-linkedin-v2==0.9.3
 # Scheduling
 apscheduler==3.10.4
 croniter==2.0.1
+
+# Rate Limiting
+slowapi==0.1.9
+
+# Error Tracking & Monitoring
+sentry-sdk[fastapi]==1.40.0
+cryptography==42.0.2

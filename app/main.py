@@ -2,12 +2,16 @@
 AI Content Platform - Main Application
 FastAPI application for AI-powered social media content generation
 """
-from fastapi import FastAPI
+import logging
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 
 from app.core.config import get_settings
-from app.core.database import engine, Base
+from app.core.database import engine, Base, SessionLocal
+from app.core.sentry import init_sentry, setup_sentry_middleware
+from app.core.rate_limit import setup_rate_limiting, limiter
 from app.api import (
     auth_router,
     brands_router,
@@ -21,20 +25,50 @@ from app.api import (
     studio_router,
     brandvoice_router,
     analytics_router,
-    assistant_router
+    assistant_router,
+    costs_router,
+    onboarding_router,
+    templates_router,
+    digest_router,
+    calendar_router,
+    abtesting_router,
+    performance_router
 )
+from app.api.admin import router as admin_router
+from app.api.admin_enhanced import router as admin_enhanced_router
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
+
+# Initialize Sentry (before app creation)
+if settings.sentry_dsn:
+    init_sentry(
+        dsn=settings.sentry_dsn,
+        environment=settings.environment
+    )
+    logger.info(f"Sentry initialized for {settings.environment}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
-    # Startup: Create database tables
+    # Startup
+    logger.info(f"Starting {settings.app_name} v{settings.app_version}")
+    
+    # Create database tables
     Base.metadata.create_all(bind=engine)
+    logger.info("Database tables created/verified")
+    
     yield
-    # Shutdown: Cleanup if needed
-    pass
+    
+    # Shutdown
+    logger.info("Shutting down application")
 
 
 # Create FastAPI app
@@ -48,21 +82,61 @@ app = FastAPI(
     - Trend scraping from multiple sources
     - Image generation using AI
     - Caption and hashtag generation
+    - Video generation with lip-sync
+    - Brand voice training
     
-    Built for testing and prototyping AI influencer content.
+    Built for production-ready AI content creation.
     """,
-    version=settings.api_version,
+    version=settings.app_version,
     lifespan=lifespan
 )
+
+# Setup Sentry middleware (before other middleware)
+if settings.sentry_dsn:
+    setup_sentry_middleware(app)
+
+# Setup rate limiting
+if settings.rate_limit_enabled:
+    setup_rate_limiting(app)
+    logger.info("Rate limiting enabled")
 
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure this for production
+    allow_origins=[
+        settings.frontend_url,
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ] if settings.environment == "production" else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch-all exception handler for unhandled errors."""
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    
+    # In production, don't expose error details
+    if settings.environment == "production":
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "internal_server_error",
+                "message": "An unexpected error occurred. Please try again later.",
+            }
+        )
+    else:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "internal_server_error",
+                "message": str(exc),
+                "type": type(exc).__name__
+            }
+        )
 
 # Include routers
 app.include_router(auth_router, prefix="/api/v1")
@@ -78,6 +152,15 @@ app.include_router(studio_router, prefix="/api/v1")
 app.include_router(brandvoice_router, prefix="/api/v1")
 app.include_router(analytics_router, prefix="/api/v1")
 app.include_router(assistant_router, prefix="/api/v1")
+app.include_router(costs_router, prefix="/api/v1")
+app.include_router(onboarding_router, prefix="/api/v1")
+app.include_router(templates_router, prefix="/api/v1")
+app.include_router(digest_router, prefix="/api/v1")
+app.include_router(calendar_router, prefix="/api/v1")
+app.include_router(abtesting_router, prefix="/api/v1")
+app.include_router(performance_router, prefix="/api/v1")
+app.include_router(admin_router, prefix="/api/v1")
+app.include_router(admin_enhanced_router, prefix="/api/v1")
 
 
 @app.get("/")
@@ -85,29 +168,52 @@ async def root():
     """Root endpoint"""
     return {
         "message": "AI Content Platform API",
-        "version": settings.api_version,
+        "version": settings.app_version,
+        "environment": settings.environment,
         "docs": "/docs"
     }
 
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for Render"""
-    from app.core.database import SessionLocal
+    """Health check endpoint for monitoring and load balancers"""
+    db_status = "unknown"
+    redis_status = "unknown"
     
+    # Test database connection
     try:
-        # Test database connection
         db = SessionLocal()
         db.execute("SELECT 1")
         db.close()
         db_status = "connected"
     except Exception as e:
-        db_status = f"error: {str(e)}"
+        db_status = f"error: {str(e)[:50]}"
+        logger.error(f"Database health check failed: {e}")
+    
+    # Test Redis connection (if configured)
+    try:
+        if settings.redis_url:
+            import redis
+            r = redis.from_url(settings.redis_url)
+            r.ping()
+            redis_status = "connected"
+    except Exception as e:
+        redis_status = f"error: {str(e)[:50]}"
+        logger.error(f"Redis health check failed: {e}")
+    
+    # Overall status
+    is_healthy = db_status == "connected"
     
     return {
-        "status": "healthy",
-        "version": settings.api_version,
-        "database": db_status
+        "status": "healthy" if is_healthy else "degraded",
+        "version": settings.app_version,
+        "environment": settings.environment,
+        "checks": {
+            "database": db_status,
+            "redis": redis_status,
+            "sentry": "configured" if settings.sentry_dsn else "not configured",
+            "rate_limiting": "enabled" if settings.rate_limit_enabled else "disabled"
+        }
     }
 
 
@@ -115,14 +221,32 @@ async def health_check():
 async def api_status():
     """API status and configuration check"""
     return {
-        "api_version": settings.api_version,
-        "openai_configured": bool(settings.openai_api_key),
-        "replicate_configured": bool(settings.replicate_api_token),
-        "news_api_configured": bool(settings.news_api_key),
+        "api_version": settings.app_version,
+        "environment": settings.environment,
+        "features": {
+            "openai": bool(settings.openai_api_key),
+            "replicate": bool(settings.replicate_api_token),
+            "stripe": bool(settings.stripe_secret_key),
+            "email": bool(settings.smtp_host),
+            "sentry": bool(settings.sentry_dsn),
+            "rate_limiting": settings.rate_limit_enabled
+        },
         "endpoints": {
+            "auth": "/api/v1/auth",
             "brands": "/api/v1/brands",
-            "categories": "/api/v1/categories",
-            "trends": "/api/v1/trends",
-            "generate": "/api/v1/generate"
+            "studio": "/api/v1/studio",
+            "video": "/api/v1/video",
+            "social": "/api/v1/social",
+            "billing": "/api/v1/billing",
+            "analytics": "/api/v1/analytics",
+            "costs": "/api/v1/costs"
         }
     }
+
+
+@app.get("/api/v1/rate-limit-info")
+@limiter.limit("10/minute")
+async def rate_limit_info(request: Request):
+    """Get current rate limit status"""
+    from app.core.rate_limit import get_rate_limit_info
+    return await get_rate_limit_info(request)

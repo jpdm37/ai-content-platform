@@ -286,4 +286,48 @@ export const assistantApi = {
   getCapabilities: () => api.get('/assistant/capabilities')
 };
 
+// ============ Admin API ============
+const adminInstance = axios.create({
+  baseURL: API_BASE_URL,
+  headers: { 'Content-Type': 'application/json' }
+});
+
+adminInstance.interceptors.request.use((config) => {
+  const token = localStorage.getItem('adminToken');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+export const adminApi = {
+  // Auth
+  login: (data) => adminInstance.post('/admin/login', data),
+  setup: (data) => adminInstance.post('/admin/setup', data),
+  getMe: () => adminInstance.get('/admin/me'),
+  
+  // Stats
+  getStats: () => adminInstance.get('/admin/stats'),
+  
+  // Users
+  listUsers: (params) => adminInstance.get('/admin/users', { params }),
+  getUser: (id) => adminInstance.get(`/admin/users/${id}`),
+  updateUser: (id, data) => adminInstance.patch(`/admin/users/${id}`, data),
+  grantSubscription: (id, data) => adminInstance.post(`/admin/users/${id}/subscription`, data),
+  impersonateUser: (id, data) => adminInstance.post(`/admin/users/${id}/impersonate`, data),
+  createTestBrand: (id, data) => adminInstance.post(`/admin/users/${id}/test-brand`, data),
+  
+  // Settings
+  getSettings: () => adminInstance.get('/admin/settings'),
+  updateSetting: (key, data) => adminInstance.put(`/admin/settings/${key}`, data),
+  
+  // Audit
+  getAuditLogs: (params) => adminInstance.get('/admin/audit-logs', { params }),
+  
+  // Costs (uses main api with admin token)
+  getCostOverview: (params) => adminInstance.get('/costs/admin/overview', { params }),
+  getTopUsers: (params) => adminInstance.get('/costs/admin/top-users', { params }),
+  getModelUsage: (params) => adminInstance.get('/costs/admin/model-usage', { params })
+};
+
 export default api;

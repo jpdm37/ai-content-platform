@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.config import get_settings
+from app.core.rate_limit import limiter
 from app.models.user import User, RefreshToken, AuthProvider
 from app.models.auth_schemas import (
     UserCreate, UserLogin, UserResponse, UserUpdate, UserUpdatePassword,
@@ -41,7 +42,8 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 # ========== Registration & Login ==========
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")  # Prevent mass registration
+async def register(request: Request, user_data: UserCreate, db: Session = Depends(get_db)):
     """Register a new user with email and password"""
     # Check if user already exists
     existing_user = db.query(User).filter(User.email == user_data.email.lower()).first()
@@ -72,6 +74,7 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
+@limiter.limit("10/minute")  # Prevent brute force
 async def login(
     user_data: UserLogin,
     request: Request,
@@ -269,7 +272,9 @@ async def confirm_email_verification(
 # ========== Password Reset ==========
 
 @router.post("/password-reset/request", response_model=MessageResponse)
+@limiter.limit("3/minute")  # Strict limit to prevent abuse
 async def request_password_reset(
+    request: Request,
     data: PasswordResetRequest,
     db: Session = Depends(get_db)
 ):
@@ -293,7 +298,9 @@ async def request_password_reset(
 
 
 @router.post("/password-reset/confirm", response_model=MessageResponse)
+@limiter.limit("5/minute")  # Prevent brute force token guessing
 async def confirm_password_reset(
+    request: Request,
     data: PasswordResetConfirm,
     db: Session = Depends(get_db)
 ):

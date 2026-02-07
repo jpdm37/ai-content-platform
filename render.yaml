@@ -1,24 +1,38 @@
-# Render Blueprint - One-Click Deploy
-# https://render.com/docs/blueprint-spec
+# ==============================================================================
+# Render Blueprint - Deploy from GitHub
+# ==============================================================================
+# 
+# DEPLOYMENT STEPS:
+# 1. Push this repo to GitHub
+# 2. Go to https://render.com/dashboard
+# 3. Click "New" → "Blueprint"
+# 4. Connect your GitHub repo
+# 5. Render will auto-detect this file and create all services
+# 6. Add your API keys in the Render dashboard (see below)
+#
+# ==============================================================================
 
 databases:
   - name: ai-content-db
-    databaseName: ai_content
+    databaseName: ai_content_platform
     user: ai_content_user
     plan: free
     region: oregon
 
 services:
+  # ===================
   # Backend API
+  # ===================
   - type: web
     name: ai-content-api
     runtime: python
     region: oregon
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: chmod +x build.sh && ./build.sh
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
+      # Auto-configured by Render
       - key: DATABASE_URL
         fromDatabase:
           name: ai-content-db
@@ -30,34 +44,45 @@ services:
           property: connectionString
       - key: SECRET_KEY
         generateValue: true
-      - key: ALGORITHM
-        value: HS256
-      - key: ACCESS_TOKEN_EXPIRE_MINUTES
-        value: 1440
-      - key: ENVIRONMENT
-        value: production
-      # Add these manually in dashboard after deploy:
-      # - OPENAI_API_KEY
-      # - REPLICATE_API_TOKEN
-      # - ELEVENLABS_API_KEY
-      # - STRIPE_SECRET_KEY
-      # - STRIPE_PUBLISHABLE_KEY
-      # - STRIPE_WEBHOOK_SECRET
-      # - STRIPE_PRICE_ID_CREATOR
-      # - STRIPE_PRICE_ID_PRO
-      # - STRIPE_PRICE_ID_AGENCY
-      # - RESEND_API_KEY
-      # - EMAIL_FROM
-      # - FRONTEND_URL
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      - key: DEBUG
+        value: "false"
+      
+      # ⚠️ ADD THESE MANUALLY IN RENDER DASHBOARD AFTER DEPLOY:
+      # 
+      # Required for AI features:
+      # - OPENAI_API_KEY=sk-...
+      # - REPLICATE_API_TOKEN=r8_...
+      #
+      # Required for billing (get from Stripe dashboard):
+      # - STRIPE_SECRET_KEY=sk_live_... or sk_test_...
+      # - STRIPE_PUBLISHABLE_KEY=pk_live_... or pk_test_...
+      # - STRIPE_WEBHOOK_SECRET=whsec_...
+      # - STRIPE_PRICE_CREATOR=price_...
+      # - STRIPE_PRICE_PRO=price_...
+      # - STRIPE_PRICE_AGENCY=price_...
+      #
+      # Required for emails:
+      # - SMTP_HOST=smtp.gmail.com
+      # - SMTP_PORT=587
+      # - SMTP_USER=your-email@gmail.com
+      # - SMTP_PASSWORD=your-app-password
+      # - EMAIL_FROM=your-email@gmail.com
+      #
+      # Set after frontend deploys (copy URL from Render):
+      # - FRONTEND_URL=https://ai-content-app.onrender.com
 
+  # ===================
   # Background Worker (Celery)
+  # ===================
   - type: worker
     name: ai-content-worker
     runtime: python
     region: oregon
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: celery -A app.worker worker --loglevel=info
+    startCommand: celery -A app.worker worker --loglevel=info --concurrency=2
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -73,20 +98,55 @@ services:
           name: ai-content-api
           type: web
           envVarKey: SECRET_KEY
-      # Copy same env vars as API
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      # ⚠️ Copy the same API keys from ai-content-api
 
-  # Redis for Celery
+  # ===================
+  # Celery Beat (Scheduler)
+  # ===================
+  - type: worker
+    name: ai-content-scheduler
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A app.worker beat --loglevel=info
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ai-content-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: ai-content-redis
+          type: redis
+          property: connectionString
+      - key: SECRET_KEY
+        fromService:
+          name: ai-content-api
+          type: web
+          envVarKey: SECRET_KEY
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+
+  # ===================
+  # Redis (for Celery)
+  # ===================
   - type: redis
     name: ai-content-redis
     region: oregon
     plan: free
     maxmemoryPolicy: noeviction
 
-  # Frontend Static Site
+  # ===================
+  # Frontend (React)
+  # ===================
   - type: web
     name: ai-content-app
     runtime: static
     region: oregon
+    plan: free
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: frontend/dist
     headers:
@@ -94,6 +154,7 @@ services:
         name: Cache-Control
         value: no-cache
     routes:
+      # SPA routing - send all routes to index.html
       - type: rewrite
         source: /*
         destination: /index.html

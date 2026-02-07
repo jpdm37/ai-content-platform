@@ -57,6 +57,14 @@ class Brand(Base):
     brand_colors = Column(JSON)  # List of hex colors
     brand_keywords = Column(JSON)  # Keywords for content
     
+    # Target audience
+    target_audience = Column(Text)
+    
+    # Template/Demo flags
+    is_demo = Column(Boolean, default=False)  # Demo brand for new users
+    is_template = Column(Boolean, default=False)  # Template brand
+    template_id = Column(String(100), nullable=True)  # Which template was used
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -71,7 +79,7 @@ class Category(Base):
     __tablename__ = "categories"
     
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), nullable=False, unique=True, index=True)
+    name = Column(String(100), nullable=False, index=True)
     description = Column(Text)
     keywords = Column(JSON)  # Keywords for trend scraping
     
@@ -79,9 +87,20 @@ class Category(Base):
     image_prompt_template = Column(Text)
     caption_prompt_template = Column(Text)
     
+    # Ownership - if user_id is NULL, it's a global category (admin-managed)
+    # if user_id is set, it's a custom niche owned by that user
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=True, index=True)
+    is_global = Column(Boolean, default=True)  # True = admin category, False = user custom niche
+    
+    # For custom niches - additional customization
+    custom_rss_feeds = Column(JSON, nullable=True)  # User can add their own RSS feeds
+    custom_google_news_query = Column(Text, nullable=True)  # Custom Google News search query
+    
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
+    owner = relationship("User", foreign_keys=[user_id])
     brands = relationship("Brand", secondary=brand_categories, back_populates="categories")
     trends = relationship("Trend", back_populates="category")
     generated_content = relationship("GeneratedContent", back_populates="category")

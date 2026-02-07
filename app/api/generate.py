@@ -2,11 +2,12 @@
 Content Generation API Routes - Protected by Authentication
 """
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.config import get_settings
+from app.core.rate_limit import limiter
 from app.models import (
     Brand, Category, Trend, GeneratedContent,
     ContentType, ContentStatus
@@ -18,6 +19,7 @@ from app.models.schemas import (
 from app.models.user import User
 from app.auth.dependencies import get_current_user, get_current_verified_user
 from app.services.generator import ContentGeneratorService
+from app.services.cost_optimizer import get_usage_tracker
 
 settings = get_settings()
 router = APIRouter(prefix="/generate", tags=["generation"])
@@ -31,12 +33,20 @@ def get_user_api_keys(user: User) -> tuple[str, str]:
 
 
 @router.post("/avatar", response_model=GeneratedContentResponse)
+@limiter.limit("10/minute")  # Avatar generation is resource-intensive
 async def generate_avatar(
+    request_obj: Request,
     request: GenerateAvatarRequest,
     current_user: User = Depends(get_current_verified_user),
     db: Session = Depends(get_db)
 ):
     """Generate an AI avatar image for a brand"""
+    # Check user quota
+    tracker = get_usage_tracker(db)
+    allowed, message, _ = tracker.check_quota(current_user.id, "image", count=1)
+    if not allowed:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=message)
+    
     brand = db.query(Brand).filter(
         Brand.id == request.brand_id,
         Brand.user_id == current_user.id
@@ -72,12 +82,21 @@ async def generate_avatar(
 
 
 @router.post("/content", response_model=GeneratedContentResponse)
+@limiter.limit("20/minute")  # Content generation limit
 async def generate_content(
+    request_obj: Request,
     request: GenerateContentRequest,
     current_user: User = Depends(get_current_verified_user),
     db: Session = Depends(get_db)
 ):
     """Generate content (image, text) for a brand"""
+    # Check user quota
+    tracker = get_usage_tracker(db)
+    gen_type = "image" if request.content_type.value == "image" else "text"
+    allowed, message, _ = tracker.check_quota(current_user.id, gen_type, count=1)
+    if not allowed:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=message)
+    
     brand = db.query(Brand).filter(
         Brand.id == request.brand_id,
         Brand.user_id == current_user.id

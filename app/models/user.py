@@ -4,7 +4,7 @@ User and Authentication Database Models
 from datetime import datetime
 from sqlalchemy import (
     Column, Integer, String, Text, DateTime, ForeignKey, 
-    Boolean, Enum
+    Boolean, Enum, JSON
 )
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -26,6 +26,7 @@ class User(Base):
     hashed_password = Column(String(255), nullable=True)  # Nullable for OAuth users
     
     # Profile
+    name = Column(String(255))  # Added for compatibility
     full_name = Column(String(255))
     avatar_url = Column(Text)
     
@@ -34,13 +35,53 @@ class User(Base):
     is_verified = Column(Boolean, default=False)
     is_superuser = Column(Boolean, default=False)
     
+    # Admin access
+    is_admin = Column(Boolean, default=False)
+    admin_role = Column(String(50), nullable=True)  # super_admin, admin, support
+    
     # OAuth
     auth_provider = Column(Enum(AuthProvider), default=AuthProvider.LOCAL)
     oauth_id = Column(String(255), nullable=True)  # Provider's user ID
     
-    # API Keys (user can store their own keys)
-    openai_api_key = Column(Text, nullable=True)
-    replicate_api_token = Column(Text, nullable=True)
+    # API Keys (user can store their own keys) - ENCRYPTED AT REST
+    _openai_api_key = Column('openai_api_key', Text, nullable=True)
+    _replicate_api_token = Column('replicate_api_token', Text, nullable=True)
+    
+    @property
+    def openai_api_key(self) -> str:
+        """Decrypt and return the OpenAI API key."""
+        from app.core.encryption import decrypt_field
+        return decrypt_field(self._openai_api_key)
+    
+    @openai_api_key.setter
+    def openai_api_key(self, value: str):
+        """Encrypt and store the OpenAI API key."""
+        from app.core.encryption import encrypt_field
+        self._openai_api_key = encrypt_field(value)
+    
+    @property
+    def replicate_api_token(self) -> str:
+        """Decrypt and return the Replicate API token."""
+        from app.core.encryption import decrypt_field
+        return decrypt_field(self._replicate_api_token)
+    
+    @replicate_api_token.setter
+    def replicate_api_token(self, value: str):
+        """Encrypt and store the Replicate API token."""
+        from app.core.encryption import encrypt_field
+        self._replicate_api_token = encrypt_field(value)
+    
+    # Onboarding tracking
+    onboarding_data = Column(JSON, nullable=True, default=dict)
+    onboarding_completed = Column(Boolean, default=False)
+    
+    # Email preferences
+    email_preferences = Column(JSON, nullable=True, default=lambda: {
+        "weekly_digest": True,
+        "content_suggestions": True,
+        "product_updates": True,
+        "tips_and_tricks": True
+    })
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)

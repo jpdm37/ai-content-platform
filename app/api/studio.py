@@ -4,10 +4,11 @@ AI Content Studio API Routes
 Unified content generation from a single brief.
 """
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.rate_limit import limiter
 from app.models.user import User
 from app.auth.dependencies import get_current_user, get_current_verified_user
 from app.billing.service import BillingService
@@ -29,7 +30,9 @@ router = APIRouter(prefix="/studio", tags=["content-studio"])
 # ==================== Projects ====================
 
 @router.post("/projects", response_model=ProjectResponse)
+@limiter.limit("5/minute")  # Studio projects are resource-intensive
 async def create_project(
+    request_obj: Request,
     request: CreateProjectRequest,
     current_user: User = Depends(get_current_verified_user),
     db: Session = Depends(get_db)

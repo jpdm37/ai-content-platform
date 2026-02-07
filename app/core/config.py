@@ -9,7 +9,9 @@ from typing import Optional
 class Settings(BaseSettings):
     # Application
     app_name: str = "AI Content Platform"
+    app_version: str = "1.0.0"
     debug: bool = False
+    environment: str = "development"  # development, staging, production
     api_version: str = "v1"
     frontend_url: str = "http://localhost:3000"
     
@@ -86,8 +88,15 @@ class Settings(BaseSettings):
     # Video Generation - ElevenLabs
     elevenlabs_api_key: Optional[str] = None
     
+    # Error Tracking - Sentry
+    sentry_dsn: Optional[str] = None
+    
     # Rate limiting
+    rate_limit_enabled: bool = True
     rate_limit_per_minute: int = 60
+    
+    # Admin setup security
+    admin_setup_token: Optional[str] = None  # Set to require token for initial admin setup
     
     class Config:
         env_file = ".env"

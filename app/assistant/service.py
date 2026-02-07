@@ -70,9 +70,10 @@ If the user has a brand context, keep suggestions aligned with their brand voice
         # Build messages
         messages = [{"role": "system", "content": system_prompt}]
         
-        # Add conversation history
+        # Add conversation history (limit to save tokens)
         if conversation_history:
-            for msg in conversation_history[-10:]:  # Last 10 messages
+            # Only keep last 6 messages to reduce token usage
+            for msg in conversation_history[-6:]:
                 messages.append({
                     "role": msg.get("role", "user"),
                     "content": msg.get("content", "")
@@ -81,11 +82,20 @@ If the user has a brand context, keep suggestions aligned with their brand voice
         # Add current message
         messages.append({"role": "user", "content": message})
         
+        # Select model based on complexity
+        # Use gpt-4o-mini for simple queries, gpt-4o for complex ones
+        is_complex = (
+            context and context.get("brand_id") or  # Brand context needs better understanding
+            len(message) > 500 or  # Long messages
+            any(word in message.lower() for word in ["strategy", "analyze", "explain", "complex"])
+        )
+        model = "gpt-4o" if is_complex else "gpt-4o-mini"
+        
         try:
             response = await self.openai.chat.completions.create(
-                model="gpt-4o",
+                model=model,
                 messages=messages,
-                max_tokens=1500,
+                max_tokens=1000,  # Reduced from 1500
                 temperature=0.7
             )
             
@@ -97,7 +107,8 @@ If the user has a brand context, keep suggestions aligned with their brand voice
             return {
                 "response": assistant_message,
                 "actions": actions,
-                "tokens_used": response.usage.total_tokens if response.usage else 0
+                "tokens_used": response.usage.total_tokens if response.usage else 0,
+                "model_used": model
             }
             
         except Exception as e:

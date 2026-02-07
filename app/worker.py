@@ -51,6 +51,16 @@ celery_app.conf.beat_schedule = {
         "task": "app.worker.refresh_expiring_tokens",
         "schedule": crontab(minute=30),  # Every hour at :30
     },
+    # Send weekly digests every Monday at 9 AM UTC
+    "send-weekly-digests": {
+        "task": "app.worker.send_weekly_digests",
+        "schedule": crontab(minute=0, hour=9, day_of_week=1),  # Monday 9 AM
+    },
+    # Sync performance metrics every 6 hours
+    "sync-performance-metrics": {
+        "task": "app.worker.sync_all_performance_metrics",
+        "schedule": crontab(minute=0, hour="*/6"),  # Every 6 hours
+    },
 }
 
 
@@ -286,6 +296,133 @@ def refresh_expiring_tokens():
         return {"status": "success", "refreshed": refreshed, "failed": failed}
     except Exception as e:
         logger.error(f"Error refreshing tokens: {e}")
+        return {"status": "error", "message": str(e)}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.worker.send_weekly_digests")
+def send_weekly_digests():
+    """Send weekly email digests to all eligible users"""
+    from app.core.database import SessionLocal
+    from app.digest.service import EmailDigestService
+    import asyncio
+    
+    logger.info("Starting weekly digest send...")
+    
+    db = SessionLocal()
+    try:
+        service = EmailDigestService(db)
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        results = loop.run_until_complete(service.send_all_weekly_digests())
+        loop.close()
+        
+        logger.info(f"Weekly digests sent: {results}")
+        return {"status": "success", **results}
+    except Exception as e:
+        logger.error(f"Error sending weekly digests: {e}")
+        return {"status": "error", "message": str(e)}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.worker.send_single_digest")
+def send_single_digest(user_id: int):
+    """Send weekly digest to a single user (for testing or manual trigger)"""
+    from app.core.database import SessionLocal
+    from app.digest.service import EmailDigestService
+    from app.models.user import User
+    import asyncio
+    
+    logger.info(f"Sending digest to user {user_id}...")
+    
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return {"status": "error", "message": "User not found"}
+        
+        service = EmailDigestService(db)
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        success = loop.run_until_complete(service.send_weekly_digest(user))
+        loop.close()
+        
+        return {"status": "success" if success else "skipped", "user_id": user_id}
+    except Exception as e:
+        logger.error(f"Error sending digest to user {user_id}: {e}")
+        return {"status": "error", "message": str(e)}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.worker.sync_all_performance_metrics")
+def sync_all_performance_metrics():
+    """Sync performance metrics for all active users"""
+    from app.core.database import SessionLocal
+    from app.models.user import User
+    from app.performance.service import PerformanceTrackingService
+    import asyncio
+    
+    logger.info("Starting performance metrics sync...")
+    
+    db = SessionLocal()
+    try:
+        # Get all active users with connected social accounts
+        users = db.query(User).filter(User.is_active == True).all()
+        
+        total_synced = 0
+        total_failed = 0
+        
+        for user in users:
+            try:
+                service = PerformanceTrackingService(db)
+                
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                result = loop.run_until_complete(service.sync_post_metrics(user.id))
+                loop.close()
+                
+                total_synced += result.get("synced", 0)
+                total_failed += result.get("failed", 0)
+                
+            except Exception as e:
+                logger.error(f"Error syncing metrics for user {user.id}: {e}")
+                total_failed += 1
+        
+        logger.info(f"Performance sync complete: {total_synced} synced, {total_failed} failed")
+        return {"status": "success", "synced": total_synced, "failed": total_failed}
+    except Exception as e:
+        logger.error(f"Error in performance sync: {e}")
+        return {"status": "error", "message": str(e)}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.worker.sync_user_performance")
+def sync_user_performance(user_id: int, platform: str = None):
+    """Sync performance metrics for a single user"""
+    from app.core.database import SessionLocal
+    from app.performance.service import PerformanceTrackingService
+    import asyncio
+    
+    logger.info(f"Syncing performance for user {user_id}...")
+    
+    db = SessionLocal()
+    try:
+        service = PerformanceTrackingService(db)
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(service.sync_post_metrics(user_id, platform))
+        loop.close()
+        
+        return {"status": "success", **result}
+    except Exception as e:
+        logger.error(f"Error syncing performance for user {user_id}: {e}")
         return {"status": "error", "message": str(e)}
     finally:
         db.close()

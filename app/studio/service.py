@@ -187,36 +187,33 @@ class ContentStudioService:
         cost = 0.0
         tone_desc = TONE_DESCRIPTIONS.get(project.tone, project.tone)
         
+        # Use gpt-4o-mini for captions - 20x cheaper, quality is sufficient
+        model = "gpt-4o-mini"
+        
         for platform in project.target_platforms:
             platform_spec = PLATFORM_SPECS.get(platform, PLATFORM_SPECS["instagram"])
             
-            prompt = f"""Generate {project.num_variations} unique social media captions for {platform}.
+            # Optimized prompt - shorter but effective
+            prompt = f"""Generate {project.num_variations} unique {platform} captions.
 
-Topic/Brief: {project.brief}
-
-Brand Voice: {brand_voice or 'Not specified'}
+Topic: {project.brief}
 Tone: {tone_desc}
-Max Length: {platform_spec['max_chars']} characters
+Max: {platform_spec['max_chars']} chars
+{f'Brand: {brand_voice}' if brand_voice else ''}
 
-Requirements:
-- Each caption should be unique and engaging
-- Include a clear hook at the beginning
-- Include a call-to-action
-- Be appropriate for {platform}
-- Number each variation (1., 2., 3., etc.)
-
-Generate {project.num_variations} distinct captions:"""
+Each caption needs: hook, value, CTA. Number them 1-{project.num_variations}."""
 
             try:
                 response = await self.openai.chat.completions.create(
-                    model="gpt-4o",
+                    model=model,
                     messages=[{"role": "user", "content": prompt}],
-                    max_tokens=2000,
+                    max_tokens=1000,  # Reduced from 2000
                     temperature=0.8
                 )
                 
                 content = response.choices[0].message.content
-                cost += 0.01  # Approximate cost
+                # gpt-4o-mini costs ~$0.0006 per 1K tokens vs $0.01 for gpt-4o
+                cost += 0.0006
                 
                 # Parse variations
                 variations = self._parse_numbered_list(content)
@@ -228,7 +225,7 @@ Generate {project.num_variations} distinct captions:"""
                         text_content=caption.strip(),
                         platform=platform,
                         variation_number=i,
-                        ai_model_used="gpt-4o",
+                        ai_model_used=model,
                         prompt_used=prompt,
                         cost_usd=cost / len(variations)
                     )

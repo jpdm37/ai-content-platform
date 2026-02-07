@@ -51,8 +51,30 @@ import BrandVoice from './pages/brandvoice/BrandVoice';
 // Analytics Pages
 import AnalyticsDashboard from './pages/analytics/AnalyticsDashboard';
 
+// Cost Dashboard
+import CostDashboard from './pages/costs/CostDashboard';
+
 // Assistant Pages
 import AssistantChat from './pages/assistant/AssistantChat';
+
+// Admin Pages
+import AdminLogin from './pages/admin/AdminLogin';
+import AdminDashboard from './pages/admin/AdminDashboard';
+
+// Onboarding
+import OnboardingWizard from './pages/onboarding/OnboardingWizard';
+
+// Templates
+import TemplatesLibrary from './pages/templates/TemplatesLibrary';
+
+// Calendar
+import ContentCalendar from './pages/calendar/ContentCalendar';
+
+// A/B Testing
+import ABTestingDashboard, { ABTestDetail } from './pages/abtesting/ABTesting';
+
+// Performance Tracking
+import PerformanceDashboard from './pages/performance/PerformanceDashboard';
 
 export default function App() {
   return (
@@ -75,6 +97,9 @@ export default function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/auth/callback/:provider" element={<OAuthCallback />} />
+
+          {/* Onboarding (protected but no layout) */}
+          <Route path="/onboarding" element={<ProtectedRoute><OnboardingWizard /></ProtectedRoute>} />
 
           {/* Protected Routes */}
           <Route path="/" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
@@ -112,14 +137,35 @@ export default function App() {
           <Route path="/studio/create" element={<ProtectedRoute requireVerified><Layout><StudioCreate /></Layout></ProtectedRoute>} />
           <Route path="/studio/:id" element={<ProtectedRoute><Layout><StudioDetail /></Layout></ProtectedRoute>} />
           
+          {/* Templates Library */}
+          <Route path="/templates" element={<ProtectedRoute><Layout><TemplatesLibrary /></Layout></ProtectedRoute>} />
+          
+          {/* Content Calendar */}
+          <Route path="/calendar" element={<ProtectedRoute><Layout><ContentCalendar /></Layout></ProtectedRoute>} />
+          
+          {/* A/B Testing */}
+          <Route path="/ab-testing" element={<ProtectedRoute><Layout><ABTestingDashboard /></Layout></ProtectedRoute>} />
+          <Route path="/ab-testing/:id" element={<ProtectedRoute><Layout><ABTestDetail /></Layout></ProtectedRoute>} />
+          
+          {/* Performance Tracking */}
+          <Route path="/performance" element={<ProtectedRoute><Layout><PerformanceDashboard /></Layout></ProtectedRoute>} />
+          
           {/* Brand Voice Routes */}
           <Route path="/brands/:brandId/voice" element={<ProtectedRoute><Layout><BrandVoice /></Layout></ProtectedRoute>} />
           
           {/* Analytics Routes */}
           <Route path="/analytics" element={<ProtectedRoute><Layout><AnalyticsDashboard /></Layout></ProtectedRoute>} />
           
+          {/* Cost Dashboard */}
+          <Route path="/costs" element={<ProtectedRoute><Layout><CostDashboard /></Layout></ProtectedRoute>} />
+          
           {/* AI Assistant Routes */}
           <Route path="/assistant" element={<ProtectedRoute><Layout><AssistantChat /></Layout></ProtectedRoute>} />
+          
+          {/* Admin Routes (separate auth system) */}
+          <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/admin" element={<AdminDashboard />} />
         </Routes>
       </AuthProvider>
     </Router>

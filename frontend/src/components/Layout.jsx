@@ -17,13 +17,22 @@ import {
   Video,
   BarChart3,
   MessageCircle,
-  Layers
+  Layers,
+  DollarSign,
+  FileText,
+  CalendarDays,
+  FlaskConical,
+  Activity
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Content Studio', href: '/studio', icon: Layers },
+  { name: 'Calendar', href: '/calendar', icon: CalendarDays },
+  { name: 'Performance', href: '/performance', icon: Activity },
+  { name: 'Templates', href: '/templates', icon: FileText },
   { name: 'AI Assistant', href: '/assistant', icon: MessageCircle },
+  { name: 'A/B Testing', href: '/ab-testing', icon: FlaskConical },
   { name: 'Brands', href: '/brands', icon: Building2 },
   { name: 'Avatar Training', href: '/lora', icon: Sparkles },
   { name: 'Generate', href: '/generate', icon: Zap },
@@ -32,6 +41,7 @@ const navigation = [
   { name: 'Social Accounts', href: '/social/accounts', icon: Share2 },
   { name: 'Schedule', href: '/social/schedule', icon: Calendar },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Usage & Costs', href: '/costs', icon: DollarSign },
   { name: 'Trends', href: '/trends', icon: TrendingUp },
 ];
 

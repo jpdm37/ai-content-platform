@@ -46,10 +46,34 @@ class SocialAccount(Base):
     platform_display_name = Column(String(255), nullable=True)
     profile_image_url = Column(Text, nullable=True)
     
-    # OAuth tokens (encrypted in production)
-    access_token = Column(Text, nullable=True)
-    refresh_token = Column(Text, nullable=True)
+    # OAuth tokens - ENCRYPTED AT REST
+    _access_token = Column('access_token', Text, nullable=True)
+    _refresh_token = Column('refresh_token', Text, nullable=True)
     token_expires_at = Column(DateTime, nullable=True)
+    
+    @property
+    def access_token(self) -> str:
+        """Decrypt and return the access token."""
+        from app.core.encryption import decrypt_field
+        return decrypt_field(self._access_token)
+    
+    @access_token.setter
+    def access_token(self, value: str):
+        """Encrypt and store the access token."""
+        from app.core.encryption import encrypt_field
+        self._access_token = encrypt_field(value)
+    
+    @property
+    def refresh_token(self) -> str:
+        """Decrypt and return the refresh token."""
+        from app.core.encryption import decrypt_field
+        return decrypt_field(self._refresh_token)
+    
+    @refresh_token.setter
+    def refresh_token(self, value: str):
+        """Encrypt and store the refresh token."""
+        from app.core.encryption import encrypt_field
+        self._refresh_token = encrypt_field(value)
     
     # Account status
     is_active = Column(Boolean, default=True)
@@ -145,15 +169,26 @@ class PostTemplate(Base):
 
 
 class PublishingLog(Base):
-    """Log of all publishing attempts"""
+    """Log of all publishing attempts and engagement tracking"""
     __tablename__ = "publishing_logs"
     
     id = Column(Integer, primary_key=True, index=True)
     scheduled_post_id = Column(Integer, ForeignKey('scheduled_social_posts.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=True, index=True)
+    account_id = Column(Integer, ForeignKey('social_accounts.id', ondelete='SET NULL'), nullable=True)
+    
+    # Platform info
+    platform = Column(Enum(SocialPlatform), nullable=True)
+    platform_post_id = Column(String(255), nullable=True)
+    post_url = Column(Text, nullable=True)
+    
+    # Post content (for reference)
+    caption = Column(Text, nullable=True)
     
     # Attempt details
     attempt_number = Column(Integer, default=1)
     attempted_at = Column(DateTime, default=datetime.utcnow)
+    published_at = Column(DateTime, nullable=True)
     
     # Result
     success = Column(Boolean, default=False)
@@ -161,5 +196,11 @@ class PublishingLog(Base):
     error_message = Column(Text, nullable=True)
     response_data = Column(JSON, nullable=True)
     
+    # Engagement tracking
+    engagement_data = Column(JSON, nullable=True)  # likes, comments, shares, reach, impressions
+    metrics_updated_at = Column(DateTime, nullable=True)
+    
     # Relationships
     scheduled_post = relationship("ScheduledSocialPost")
+    owner = relationship("User")
+    account = relationship("SocialAccount")

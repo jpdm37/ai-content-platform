@@ -191,20 +191,21 @@ class ContentGeneratorService:
         Trend: {trend.title if trend else 'general content'}
         """
     
-    async def _generate_image(self, prompt: str) -> str:
-        """Generate an image using Replicate"""
+    async def _generate_image(self, prompt: str, priority: str = "balanced") -> str:
+        """Generate an image using Replicate with cost-optimized model selection."""
         if not self.replicate_api_token:
             raise ValueError("Replicate API token not configured")
         
         try:
-            # Set the API token for this request
             import os
             original_token = os.environ.get("REPLICATE_API_TOKEN")
             os.environ["REPLICATE_API_TOKEN"] = self.replicate_api_token
             
-            output = replicate.run(
-                settings.replicate_image_model,
-                input={
+            # Use SDXL-Lightning for speed and cost (33% cheaper, 7x faster)
+            # Only use full SDXL for LoRA models
+            if priority == "quality":
+                model = settings.replicate_image_model  # Full SDXL or Flux
+                params = {
                     "prompt": prompt,
                     "width": settings.default_image_width,
                     "height": settings.default_image_height,
@@ -212,7 +213,19 @@ class ContentGeneratorService:
                     "guidance_scale": 7.5,
                     "num_inference_steps": 30,
                 }
-            )
+            else:
+                # SDXL-Lightning: 4-step generation
+                model = "bytedance/sdxl-lightning-4step:5599ed30703defd1d160a25a63321b4dec97101d98b4674bcc56e41f62f35637"
+                params = {
+                    "prompt": prompt,
+                    "width": settings.default_image_width,
+                    "height": settings.default_image_height,
+                    "num_outputs": 1,
+                    "num_inference_steps": 4,  # Lightning uses only 4 steps
+                    "scheduler": "K_EULER",
+                }
+            
+            output = replicate.run(model, input=params)
             
             # Restore original token
             if original_token:
@@ -241,6 +254,10 @@ class ContentGeneratorService:
         if not self.openai_client:
             raise ValueError("OpenAI API key not configured")
         
+        # Use cost-optimized model selection
+        # gpt-4o-mini is 20x cheaper than gpt-4o and sufficient for captions
+        model = "gpt-4o-mini"
+        
         system_prompt = """You are a social media content creator. Generate engaging captions 
         for Instagram/TikTok posts. The caption should be:
         - Engaging and on-brand
@@ -257,27 +274,27 @@ class ContentGeneratorService:
         }"""
         
         user_prompt = f"""
-        Brand: {brand.name}
-        Brand Description: {brand.description or 'N/A'}
-        Persona Name: {brand.persona_name or 'N/A'}
-        Persona Voice: {brand.persona_voice or 'friendly and engaging'}
-        Category: {category.name if category else 'general'}
-        Trend Topic: {trend.title if trend else 'general content'}
-        Image Description: {image_prompt or 'lifestyle photo'}
-        Brand Keywords: {', '.join(brand.brand_keywords) if brand.brand_keywords else 'N/A'}
-        
-        Generate an engaging social media caption and hashtags.
-        """
+Brand: {brand.name}
+Brand Description: {brand.description or 'N/A'}
+Persona Name: {brand.persona_name or 'N/A'}
+Persona Voice: {brand.persona_voice or 'friendly and engaging'}
+Category: {category.name if category else 'general'}
+Trend Topic: {trend.title if trend else 'general content'}
+Image Description: {image_prompt or 'lifestyle photo'}
+Brand Keywords: {', '.join(brand.brand_keywords) if brand.brand_keywords else 'N/A'}
+
+Generate an engaging social media caption and hashtags."""
         
         try:
             response = self.openai_client.chat.completions.create(
-                model=settings.openai_model,
+                model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.8
+                temperature=0.8,
+                max_tokens=500  # Captions don't need many tokens
             )
             
             import json
