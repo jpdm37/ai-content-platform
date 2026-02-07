@@ -106,7 +106,7 @@ class GeneratedVideo(Base):
     total_cost_usd = Column(Float, default=0.0)
     
     # Metadata
-    metadata = Column(JSON, nullable=True)
+    video_metadata = Column(JSON, nullable=True)
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
