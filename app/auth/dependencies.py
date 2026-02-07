@@ -108,3 +108,6 @@ async def get_current_superuser(
             detail="Insufficient permissions"
         )
     return current_user
+
+# Alias for compatibility - get_current_user already checks is_active
+get_current_active_user = get_current_user
