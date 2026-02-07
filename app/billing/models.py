@@ -206,7 +206,7 @@ class UsageRecord(Base):
     cost_credits = Column(Integer, default=1)  # Internal credit cost
     
     # Metadata
-    metadata = Column(JSON, nullable=True)
+    usage_metadata = Column(JSON, nullable=True)
     
     # Timestamp
     created_at = Column(DateTime, default=datetime.utcnow)
