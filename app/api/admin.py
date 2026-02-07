@@ -380,9 +380,7 @@ class AdminSetupRequest(AdminCreateRequest):
 
 
 @router.post("/setup")
-@limiter.limit("3/hour")  # Strict rate limiting on setup
 async def initial_setup(
-    request: Request,
     setup_data: AdminSetupRequest,
     db: Session = Depends(get_db)
 ):
