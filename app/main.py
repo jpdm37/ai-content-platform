@@ -242,7 +242,20 @@ async def api_status():
         }
     }
 
-
+@app.get("/fix-db")
+async def fix_database():
+    """Temporary endpoint to fix database schema"""
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            conn.execute(text('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS name VARCHAR(255)'))
+            conn.execute(text('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP'))
+            conn.execute(text('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP'))
+            conn.commit()
+        return {"message": "Database fixed! All columns added."}
+    except Exception as e:
+        return {"error": str(e)}
+        
 @app.get("/api/v1/rate-limit-info")
 @limiter.limit("10/minute")
 async def rate_limit_info(request: Request):
