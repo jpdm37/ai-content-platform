@@ -52,7 +52,7 @@ stripe==8.4.0
 # Social Media
 tweepy==4.14.0
 instagrapi==2.0.0
-python-linkedin-v2==0.9.3
+python-linkedin-v2==0.9.4
 
 # Scheduling
 apscheduler==3.10.4
