@@ -178,28 +178,28 @@ async def root():
 async def health_check():
     """Health check endpoint for monitoring and load balancers"""
     db_status = "unknown"
-    redis_status = "unknown"
+    redis_status = "not configured (using in-memory)"
     
     # Test database connection
     try:
-        db = SessionLocal()
-        db.execute("SELECT 1")
-        db.close()
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
         db_status = "connected"
     except Exception as e:
-        db_status = f"error: {str(e)[:50]}"
+        db_status = f"error: {str(e)[:100]}"
         logger.error(f"Database health check failed: {e}")
     
     # Test Redis connection (if configured)
-    try:
-        if settings.redis_url:
+    if settings.redis_url:
+        try:
             import redis
-            r = redis.from_url(settings.redis_url)
+            r = redis.from_url(settings.redis_url, socket_connect_timeout=2)
             r.ping()
             redis_status = "connected"
-    except Exception as e:
-        redis_status = f"error: {str(e)[:50]}"
-        logger.error(f"Redis health check failed: {e}")
+        except Exception as e:
+            redis_status = "error (falling back to in-memory)"
+            logger.warning(f"Redis health check failed: {e}")
     
     # Overall status
     is_healthy = db_status == "connected"
@@ -215,7 +215,6 @@ async def health_check():
             "rate_limiting": "enabled" if settings.rate_limit_enabled else "disabled"
         }
     }
-
 
 @app.get("/api/v1/status")
 async def api_status():
