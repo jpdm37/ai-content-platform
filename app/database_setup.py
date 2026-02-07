@@ -692,3 +692,6 @@ if __name__ == "__main__":
         print("  drop   - Drop all database tables")
         print("  seed   - Seed default data")
         print("  setup  - Create tables and seed data")
+
+# Alias for compatibility
+   create_tables = create_all_tables
