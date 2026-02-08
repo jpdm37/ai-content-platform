@@ -107,7 +107,9 @@ app.add_middleware(
         settings.frontend_url,
         "http://localhost:3000",
         "http://localhost:5173",
-    ] if settings.environment == "production" else ["*"],
+        "https://ai-content-platform-1-iogw.onrender.com",
+        "*",  # Allow all origins for now
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
