@@ -150,8 +150,20 @@ def get_rate_limit_string(request: Request) -> str:
 def create_limiter() -> Limiter:
     """Create and configure the rate limiter."""
     
-    # Use Redis if available, otherwise in-memory
-    storage_uri = settings.redis_url if settings.redis_url else "memory://"
+    # Use in-memory storage by default (works without Redis)
+    # Only use Redis if explicitly configured and reachable
+    storage_uri = "memory://"
+    
+    if settings.redis_url:
+        try:
+            import redis
+            r = redis.from_url(settings.redis_url, socket_connect_timeout=2)
+            r.ping()
+            storage_uri = settings.redis_url
+            logger.info("Rate limiter using Redis storage")
+        except Exception as e:
+            logger.warning(f"Redis not available, using in-memory rate limiting: {e}")
+            storage_uri = "memory://"
     
     limiter = Limiter(
         key_func=get_user_identifier,

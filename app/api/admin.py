@@ -374,6 +374,7 @@ async def get_audit_logs(
 
 
 # ============ Initial Setup ============
+
 class AdminSetupRequest(AdminCreateRequest):
     """Extended request with optional setup token"""
     setup_token: Optional[str] = None
