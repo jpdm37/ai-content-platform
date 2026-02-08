@@ -74,6 +74,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title=settings.app_name,
+    redirect_slashes=False,
     description="""
     AI Content Platform API
     
