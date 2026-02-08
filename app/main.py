@@ -249,15 +249,41 @@ async def fix_database():
     results = []
     try:
         with engine.connect() as conn:
-            # Fix refresh_tokens table
+            # All missing columns for all tables
             columns = [
+                # refresh_tokens
                 "ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS user_agent TEXT",
                 "ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS ip_address VARCHAR(50)",
+                # brands
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS persona_name VARCHAR(255)",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS persona_age VARCHAR(50)",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS persona_gender VARCHAR(50)",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS persona_style TEXT",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS persona_voice TEXT",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS persona_traits TEXT",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS reference_image_url TEXT",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS brand_colors TEXT",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS brand_keywords TEXT",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS target_audience TEXT",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS is_demo BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS is_template BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS template_id INTEGER",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+                # users
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_tier VARCHAR(50) DEFAULT 'free'",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+                # admin_users
+                "ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS name VARCHAR(255)",
+                "ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+                "ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP",
             ]
             for sql in columns:
                 try:
                     conn.execute(text(sql))
-                    results.append(f"OK: {sql}")
+                    results.append(f"OK: {sql[:60]}...")
                 except Exception as e:
                     results.append(f"SKIP: {str(e)[:50]}")
             conn.commit()
