@@ -252,17 +252,16 @@ async def fix_database():
             columns = [
                 # users table
                 # generated_content table - ALL columns
-                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS category_id INTEGER",
-                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS trend_id INTEGER",
-                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'pending'",
-                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS prompt_used TEXT",
-                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS negative_prompt TEXT",
-                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS result_url TEXT",
-                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS caption TEXT",
-                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS hashtags TEXT",
-                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS generation_params TEXT",
-                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS error_message TEXT",
-                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP",
+                # trends table
+                "ALTER TABLE trends ADD COLUMN IF NOT EXISTS category_id INTEGER",
+                "ALTER TABLE trends ADD COLUMN IF NOT EXISTS title VARCHAR(500)",
+                "ALTER TABLE trends ADD COLUMN IF NOT EXISTS description TEXT",
+                "ALTER TABLE trends ADD COLUMN IF NOT EXISTS source VARCHAR(100)",
+                "ALTER TABLE trends ADD COLUMN IF NOT EXISTS source_url TEXT",
+                "ALTER TABLE trends ADD COLUMN IF NOT EXISTS popularity_score INTEGER DEFAULT 0",
+                "ALTER TABLE trends ADD COLUMN IF NOT EXISTS related_keywords TEXT",
+                "ALTER TABLE trends ADD COLUMN IF NOT EXISTS scraped_at TIMESTAMP",
+                "ALTER TABLE trends ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP",
             ]
             for sql in columns:
                 try:
