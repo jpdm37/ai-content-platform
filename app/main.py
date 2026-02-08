@@ -108,7 +108,6 @@ app.add_middleware(
         "http://localhost:3000",
         "http://localhost:5173",
         "https://ai-content-platform-1-iogw.onrender.com",
-        "*",  # Allow all origins for now
     ],
     allow_credentials=True,
     allow_methods=["*"],
