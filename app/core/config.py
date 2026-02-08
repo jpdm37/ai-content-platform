@@ -66,9 +66,9 @@ class Settings(BaseSettings):
     stripe_secret_key: Optional[str] = None
     stripe_publishable_key: Optional[str] = None
     stripe_webhook_secret: Optional[str] = None
-    stripe_price_id_creator: Optional[str] = None  # $19/mo
-    stripe_price_id_pro: Optional[str] = None      # $49/mo
-    stripe_price_id_agency: Optional[str] = None   # $149/mo
+    stripe_price_id_creator: Optional[str] = None  # €29/mo
+    stripe_price_id_pro: Optional[str] = None      # €59/mo
+    stripe_price_id_agency: Optional[str] = None   # €199/mo
     
     # Social Media - Twitter/X
     twitter_client_id: Optional[str] = None
@@ -93,7 +93,7 @@ class Settings(BaseSettings):
     sentry_dsn: Optional[str] = None
     
     # Rate limiting
-    rate_limit_enabled: bool = True
+    rate_limit_enabled: bool = False
     rate_limit_per_minute: int = 60
     
     # Admin setup security
