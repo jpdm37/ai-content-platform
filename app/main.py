@@ -249,33 +249,17 @@ async def fix_database():
     results = []
     try:
         with engine.connect() as conn:
-            # Fix users table
-            columns_to_add = [
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR(255)",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_superuser BOOLEAN DEFAULT FALSE",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_role VARCHAR(50)",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'local'",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_id VARCHAR(255)",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS openai_api_key TEXT",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS replicate_api_token TEXT",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_tier VARCHAR(50) DEFAULT 'free'",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(50)",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(255)",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP",
+            # Fix refresh_tokens table
+            columns = [
+                "ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS user_agent TEXT",
+                "ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS ip_address VARCHAR(50)",
             ]
-            for sql in columns_to_add:
+            for sql in columns:
                 try:
                     conn.execute(text(sql))
-                    results.append(f"OK: {sql[:50]}...")
+                    results.append(f"OK: {sql}")
                 except Exception as e:
-                    results.append(f"SKIP: {str(e)[:50]}...")
+                    results.append(f"SKIP: {str(e)[:50]}")
             conn.commit()
         return {"message": "Database fixed!", "results": results}
     except Exception as e:
