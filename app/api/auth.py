@@ -42,7 +42,6 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 # ========== Registration & Login ==========
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-@limiter.limit("5/minute")  # Prevent mass registration
 async def register(request: Request, user_data: UserCreate, db: Session = Depends(get_db)):
     """Register a new user with email and password"""
     # Check if user already exists
@@ -74,7 +73,6 @@ async def register(request: Request, user_data: UserCreate, db: Session = Depend
 
 
 @router.post("/login", response_model=Token)
-@limiter.limit("10/minute")  # Prevent brute force
 async def login(
     user_data: UserLogin,
     request: Request,
@@ -272,7 +270,6 @@ async def confirm_email_verification(
 # ========== Password Reset ==========
 
 @router.post("/password-reset/request", response_model=MessageResponse)
-@limiter.limit("3/minute")  # Strict limit to prevent abuse
 async def request_password_reset(
     request: Request,
     data: PasswordResetRequest,
@@ -298,7 +295,6 @@ async def request_password_reset(
 
 
 @router.post("/password-reset/confirm", response_model=MessageResponse)
-@limiter.limit("5/minute")  # Prevent brute force token guessing
 async def confirm_password_reset(
     request: Request,
     data: PasswordResetConfirm,
