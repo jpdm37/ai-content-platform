@@ -249,12 +249,35 @@ async def fix_database():
     results = []
     try:
         with engine.connect() as conn:
-            # All missing columns for all tables
             columns = [
-                # refresh_tokens
+                # users table
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR(255)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_superuser BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_role VARCHAR(50)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'local'",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_id VARCHAR(255)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS openai_api_key TEXT",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS replicate_api_token TEXT",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_tier VARCHAR(50) DEFAULT 'free'",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(50)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(255)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP",
+                # refresh_tokens table
                 "ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS user_agent TEXT",
                 "ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS ip_address VARCHAR(50)",
-                # brands
+                # admin_users table
+                "ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS name VARCHAR(255)",
+                "ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+                "ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP",
+                # brands table
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS user_id INTEGER",
                 "ALTER TABLE brands ADD COLUMN IF NOT EXISTS persona_name VARCHAR(255)",
                 "ALTER TABLE brands ADD COLUMN IF NOT EXISTS persona_age VARCHAR(50)",
                 "ALTER TABLE brands ADD COLUMN IF NOT EXISTS persona_gender VARCHAR(50)",
@@ -268,26 +291,24 @@ async def fix_database():
                 "ALTER TABLE brands ADD COLUMN IF NOT EXISTS is_demo BOOLEAN DEFAULT FALSE",
                 "ALTER TABLE brands ADD COLUMN IF NOT EXISTS is_template BOOLEAN DEFAULT FALSE",
                 "ALTER TABLE brands ADD COLUMN IF NOT EXISTS template_id INTEGER",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
                 "ALTER TABLE brands ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
-                # users
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_tier VARCHAR(50) DEFAULT 'free'",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
-                # admin_users
-                "ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS name VARCHAR(255)",
-                "ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
-                "ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP",
+                # generated_content table
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS user_id INTEGER",
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS brand_id INTEGER",
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS content_type VARCHAR(50)",
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS content TEXT",
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS metadata TEXT",
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
             ]
             for sql in columns:
                 try:
                     conn.execute(text(sql))
-                    results.append(f"OK: {sql[:60]}...")
+                    results.append(f"OK: {sql[:50]}...")
                 except Exception as e:
-                    results.append(f"SKIP: {str(e)[:50]}")
+                    results.append(f"ERR: {str(e)[:40]}")
             conn.commit()
-        return {"message": "Database fixed!", "results": results}
+        return {"message": "Database fixed!", "count": len(results), "results": results}
     except Exception as e:
         return {"error": str(e)}
         
