@@ -27,11 +27,11 @@ api.interceptors.response.use(
 
 // ============ Brands API ============
 export const brandsApi = {
-  list: () => api.get('/brands'),
-  getAll: () => api.get('/brands'),
+  list: () => api.get('/brands/'),
+  getAll: () => api.get('/brands/'),
   get: (id) => api.get(`/brands/${id}`),
   getById: (id) => api.get(`/brands/${id}`),
-  create: (data) => api.post('/brands', data),
+  create: (data) => api.post('/brands/', data),
   update: (id, data) => api.put(`/brands/${id}`, data),
   delete: (id) => api.delete(`/brands/${id}`),
   getCategories: (id) => api.get(`/brands/${id}/categories`),
@@ -41,9 +41,9 @@ export const brandsApi = {
 
 // ============ Categories API ============
 export const categoriesApi = {
-  getAll: () => api.get('/categories'),
+  getAll: () => api.get('/categories/'),
   getById: (id) => api.get(`/categories/${id}`),
-  create: (data) => api.post('/categories', data),
+  create: (data) => api.post('/categories/', data),
   delete: (id) => api.delete(`/categories/${id}`),
   seed: () => api.post('/categories/seed'),
 };
