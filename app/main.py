@@ -244,26 +244,124 @@ async def api_status():
     }
 @app.get("/fix-db")
 async def fix_database():
-    """Temporary endpoint to fix database schema"""
+    """Fix all database schema issues"""
     from sqlalchemy import text
     results = []
     try:
         with engine.connect() as conn:
-            columns = [
-                # users table
-                # generated_content table - ALL columns
-                # trends table
-                # Mark user as verified
+            statements = [
+                # users
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR(255)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_superuser BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_role VARCHAR(50)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'local'",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_id VARCHAR(255)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS openai_api_key TEXT",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS replicate_api_token TEXT",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_tier VARCHAR(50) DEFAULT 'free'",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(50)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(255)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP",
                 "UPDATE users SET is_verified = TRUE WHERE id = 1",
+                # refresh_tokens
+                "ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS user_agent TEXT",
+                "ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS ip_address VARCHAR(50)",
+                # admin_users
+                "ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS name VARCHAR(255)",
+                "ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+                "ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP",
+                # brands
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS user_id INTEGER",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS name VARCHAR(255)",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS description TEXT",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS persona_name VARCHAR(255)",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS persona_age VARCHAR(50)",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS persona_gender VARCHAR(50)",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS persona_style TEXT",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS persona_voice TEXT",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS persona_traits TEXT",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS reference_image_url TEXT",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS brand_colors TEXT",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS brand_keywords TEXT",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS target_audience TEXT",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS is_demo BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS is_template BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS template_id INTEGER",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
+                "ALTER TABLE brands ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+                # categories
+                "ALTER TABLE categories ADD COLUMN IF NOT EXISTS name VARCHAR(255)",
+                "ALTER TABLE categories ADD COLUMN IF NOT EXISTS description TEXT",
+                "ALTER TABLE categories ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
+                # trends
+                "ALTER TABLE trends ADD COLUMN IF NOT EXISTS category_id INTEGER",
+                "ALTER TABLE trends ADD COLUMN IF NOT EXISTS title VARCHAR(500)",
+                "ALTER TABLE trends ADD COLUMN IF NOT EXISTS description TEXT",
+                "ALTER TABLE trends ADD COLUMN IF NOT EXISTS source VARCHAR(100)",
+                "ALTER TABLE trends ADD COLUMN IF NOT EXISTS source_url TEXT",
+                "ALTER TABLE trends ADD COLUMN IF NOT EXISTS popularity_score INTEGER DEFAULT 0",
+                "ALTER TABLE trends ADD COLUMN IF NOT EXISTS related_keywords TEXT",
+                "ALTER TABLE trends ADD COLUMN IF NOT EXISTS scraped_at TIMESTAMP",
+                "ALTER TABLE trends ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP",
+                # generated_content
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS user_id INTEGER",
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS brand_id INTEGER",
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS category_id INTEGER",
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS trend_id INTEGER",
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS content_type VARCHAR(50)",
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'pending'",
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS prompt_used TEXT",
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS negative_prompt TEXT",
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS result_url TEXT",
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS caption TEXT",
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS hashtags TEXT",
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS generation_params TEXT",
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS error_message TEXT",
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
+                "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP",
+                # lora_models
+                "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS user_id INTEGER",
+                "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS brand_id INTEGER",
+                "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS name VARCHAR(255)",
+                "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'pending'",
+                "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS replicate_model_id TEXT",
+                "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS trigger_word VARCHAR(100)",
+                "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS training_params TEXT",
+                "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS error_message TEXT",
+                "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
+                "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP",
+                # studio_projects
+                "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS user_id INTEGER",
+                "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS brand_id INTEGER",
+                "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS name VARCHAR(255)",
+                "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'pending'",
+                "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS project_type VARCHAR(50)",
+                "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS config TEXT",
+                "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
+                "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+                # Seed categories
+                "INSERT INTO categories (name, description) VALUES ('Fashion', 'Fashion and style') ON CONFLICT DO NOTHING",
+                "INSERT INTO categories (name, description) VALUES ('Technology', 'Tech and gadgets') ON CONFLICT DO NOTHING",
+                "INSERT INTO categories (name, description) VALUES ('Food', 'Food and recipes') ON CONFLICT DO NOTHING",
+                "INSERT INTO categories (name, description) VALUES ('Travel', 'Travel content') ON CONFLICT DO NOTHING",
+                "INSERT INTO categories (name, description) VALUES ('Fitness', 'Health and fitness') ON CONFLICT DO NOTHING",
+                "INSERT INTO categories (name, description) VALUES ('Lifestyle', 'Lifestyle content') ON CONFLICT DO NOTHING",
             ]
-            for sql in columns:
+            for sql in statements:
                 try:
                     conn.execute(text(sql))
-                    results.append(f"OK: {sql[:50]}...")
+                    results.append(f"OK: {sql[:40]}...")
                 except Exception as e:
-                    results.append(f"ERR: {str(e)[:40]}")
+                    results.append(f"ERR: {sql[:20]}... - {str(e)[:30]}")
             conn.commit()
-        return {"message": "Database fixed!", "count": len(results), "results": results}
+        return {"message": "Done!", "count": len(results)}
     except Exception as e:
         return {"error": str(e)}
         
