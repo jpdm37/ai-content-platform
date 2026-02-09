@@ -101,15 +101,16 @@ if settings.rate_limit_enabled:
     logger.info("Rate limiting enabled")
 
 # CORS middleware
+allowed_origins = [
+    settings.frontend_url,
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://ai-content-platform-1-iogw.onrender.com",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        settings.frontend_url,
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "https://ai-content-platform-1-iogw.onrender.com",
-        "*",  # Allow all origins for now
-    ],
+    allow_origins=[origin for origin in allowed_origins if origin],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -256,3 +257,143 @@ async def rate_limit_info(request: Request):
     """Get current rate limit status"""
     from app.core.rate_limit import get_rate_limit_info
     return await get_rate_limit_info(request)
+
+
+@app.get("/fix-db")
+async def fix_database():
+    """Add missing database columns across core feature tables."""
+    from sqlalchemy import text
+    from app.core.database import engine
+
+    statements = [
+        # lora_models table
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS version VARCHAR(50)",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS trigger_word VARCHAR(255)",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS base_model VARCHAR(100)",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS training_steps INTEGER",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS learning_rate FLOAT",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS lora_rank INTEGER",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS resolution INTEGER",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS replicate_training_id VARCHAR(255)",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS replicate_model_owner VARCHAR(255)",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS replicate_model_name VARCHAR(255)",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS replicate_version VARCHAR(255)",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS lora_weights_url TEXT",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS lora_weights_size_mb FLOAT",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'pending'",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS progress_percent INTEGER DEFAULT 0",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS error_message TEXT",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS consistency_score FLOAT",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS test_images_generated INTEGER DEFAULT 0",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS training_cost_usd FLOAT",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS training_duration_seconds INTEGER",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS training_started_at TIMESTAMP",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS training_completed_at TIMESTAMP",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE",
+        "ALTER TABLE lora_models ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE",
+
+        # studio_projects table
+        "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS brief TEXT",
+        "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS target_platforms TEXT",
+        "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS content_types TEXT",
+        "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS tone VARCHAR(100)",
+        "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS num_variations INTEGER DEFAULT 1",
+        "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS lora_model_id INTEGER",
+        "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS include_video BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS video_duration VARCHAR(20)",
+        "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'draft'",
+        "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS progress_percent INTEGER DEFAULT 0",
+        "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS current_step VARCHAR(100)",
+        "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS captions_generated INTEGER DEFAULT 0",
+        "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS images_generated INTEGER DEFAULT 0",
+        "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS videos_generated INTEGER DEFAULT 0",
+        "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS total_cost_usd FLOAT",
+        "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS error_message TEXT",
+        "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+        "ALTER TABLE studio_projects ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP",
+
+        # scheduled_social_posts table
+        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS scheduled_for TIMESTAMP",
+        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS timezone VARCHAR(50)",
+        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS platform_specific JSON",
+        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'scheduled'",
+        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS published_at TIMESTAMP",
+        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS platform_post_id VARCHAR(255)",
+        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS platform_post_url TEXT",
+        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS error_message TEXT",
+        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0",
+        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS engagement_data JSON",
+        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS last_engagement_sync TIMESTAMP",
+        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+
+        # social_accounts table
+        "ALTER TABLE social_accounts ADD COLUMN IF NOT EXISTS platform VARCHAR(50)",
+        "ALTER TABLE social_accounts ADD COLUMN IF NOT EXISTS platform_user_id VARCHAR(255)",
+        "ALTER TABLE social_accounts ADD COLUMN IF NOT EXISTS platform_username VARCHAR(255)",
+        "ALTER TABLE social_accounts ADD COLUMN IF NOT EXISTS platform_display_name VARCHAR(255)",
+        "ALTER TABLE social_accounts ADD COLUMN IF NOT EXISTS profile_image_url TEXT",
+        "ALTER TABLE social_accounts ADD COLUMN IF NOT EXISTS access_token TEXT",
+        "ALTER TABLE social_accounts ADD COLUMN IF NOT EXISTS refresh_token TEXT",
+        "ALTER TABLE social_accounts ADD COLUMN IF NOT EXISTS token_expires_at TIMESTAMP",
+        "ALTER TABLE social_accounts ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE",
+        "ALTER TABLE social_accounts ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMP",
+        "ALTER TABLE social_accounts ADD COLUMN IF NOT EXISTS last_error TEXT",
+        "ALTER TABLE social_accounts ADD COLUMN IF NOT EXISTS platform_data JSON",
+        "ALTER TABLE social_accounts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+
+        # generated_videos table
+        "ALTER TABLE generated_videos ADD COLUMN IF NOT EXISTS audio_duration_seconds FLOAT",
+        "ALTER TABLE generated_videos ADD COLUMN IF NOT EXISTS resolution VARCHAR(20)",
+        "ALTER TABLE generated_videos ADD COLUMN IF NOT EXISTS fps INTEGER DEFAULT 30",
+        "ALTER TABLE generated_videos ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'pending'",
+        "ALTER TABLE generated_videos ADD COLUMN IF NOT EXISTS progress_percent INTEGER DEFAULT 0",
+        "ALTER TABLE generated_videos ADD COLUMN IF NOT EXISTS video_url TEXT",
+        "ALTER TABLE generated_videos ADD COLUMN IF NOT EXISTS thumbnail_url TEXT",
+        "ALTER TABLE generated_videos ADD COLUMN IF NOT EXISTS error_message TEXT",
+        "ALTER TABLE generated_videos ADD COLUMN IF NOT EXISTS processing_started_at TIMESTAMP",
+        "ALTER TABLE generated_videos ADD COLUMN IF NOT EXISTS processing_completed_at TIMESTAMP",
+        "ALTER TABLE generated_videos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+
+        # ab_tests table
+        "ALTER TABLE ab_tests ADD COLUMN IF NOT EXISTS name VARCHAR(255)",
+        "ALTER TABLE ab_tests ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'draft'",
+        "ALTER TABLE ab_tests ADD COLUMN IF NOT EXISTS start_date TIMESTAMP",
+        "ALTER TABLE ab_tests ADD COLUMN IF NOT EXISTS end_date TIMESTAMP",
+        "ALTER TABLE ab_tests ADD COLUMN IF NOT EXISTS winner_variant_id INTEGER",
+
+        # billing/admin support tables
+        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS stripe_price_id VARCHAR(255)",
+        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS generations_reset_at TIMESTAMP",
+        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS stripe_invoice_id VARCHAR(255)",
+        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS stripe_charge_id VARCHAR(255)",
+        "ALTER TABLE usage_records ADD COLUMN IF NOT EXISTS usage_metadata JSON",
+        "ALTER TABLE coupons ADD COLUMN IF NOT EXISTS applicable_tiers JSON",
+        "ALTER TABLE coupons ADD COLUMN IF NOT EXISTS stripe_coupon_id VARCHAR(255)",
+        "ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+        "ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP",
+        "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_agent TEXT",
+        "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS updated_by INTEGER",
+
+        # Seed categories (idempotent)
+        "INSERT INTO categories (name, description) SELECT 'Fashion', 'Fashion content' WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name='Fashion')",
+        "INSERT INTO categories (name, description) SELECT 'Technology', 'Tech content' WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name='Technology')",
+        "INSERT INTO categories (name, description) SELECT 'Food', 'Food content' WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name='Food')",
+        "INSERT INTO categories (name, description) SELECT 'Travel', 'Travel content' WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name='Travel')",
+        "INSERT INTO categories (name, description) SELECT 'Fitness', 'Fitness content' WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name='Fitness')",
+        "INSERT INTO categories (name, description) SELECT 'Lifestyle', 'Lifestyle content' WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name='Lifestyle')",
+    ]
+
+    results = []
+    try:
+        with engine.connect() as conn:
+            for sql in statements:
+                try:
+                    conn.execute(text(sql))
+                    results.append({"sql": sql[:80], "status": "OK"})
+                except Exception as exc:
+                    results.append({"sql": sql[:80], "status": f"Error: {str(exc)[:120]}"})
+            conn.commit()
+        return {"message": "Database fix attempted", "results": results}
+    except Exception as exc:
+        return {"error": str(exc)}

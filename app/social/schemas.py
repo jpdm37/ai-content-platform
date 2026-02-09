@@ -1,10 +1,34 @@
 """
 Social Media Integration Pydantic Schemas
 """
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
+import json
+
+
+def parse_json_field(v: Any):
+    if v is None:
+        return None
+    if isinstance(v, (list, dict)):
+        return v
+    if isinstance(v, str):
+        try:
+            return json.loads(v)
+        except (json.JSONDecodeError, TypeError):
+            return None
+    return None
+
+
+def parse_json_list(v: Any):
+    parsed = parse_json_field(v)
+    return parsed if isinstance(parsed, list) else None
+
+
+def parse_json_dict(v: Any):
+    parsed = parse_json_field(v)
+    return parsed if isinstance(parsed, dict) else None
 
 
 class SocialPlatformEnum(str, Enum):
@@ -42,8 +66,14 @@ class SocialAccountResponse(BaseModel):
     last_synced_at: Optional[datetime]
     last_error: Optional[str]
     platform_data: Optional[Dict[str, Any]]
-    created_at: datetime
+    created_at: Optional[datetime] = None
     
+    @field_validator('platform_data', mode='before')
+    @classmethod
+    def parse_platform_data(cls, v):
+        return parse_json_dict(v)
+
+
     class Config:
         from_attributes = True
 
@@ -101,12 +131,23 @@ class ScheduledPostResponse(ScheduledPostBase):
     platform_post_url: Optional[str]
     error_message: Optional[str]
     engagement_data: Optional[Dict[str, Any]]
-    created_at: datetime
+    created_at: Optional[datetime] = None
     
     # Include account info
     platform: Optional[SocialPlatformEnum] = None
     account_username: Optional[str] = None
     
+    @field_validator('hashtags', 'media_urls', mode='before')
+    @classmethod
+    def parse_list_fields(cls, v):
+        return parse_json_list(v)
+
+    @field_validator('engagement_data', mode='before')
+    @classmethod
+    def parse_engagement_data(cls, v):
+        return parse_json_dict(v)
+
+
     class Config:
         from_attributes = True
 
@@ -192,8 +233,13 @@ class PostTemplateResponse(BaseModel):
     platforms: Optional[List[str]]
     brand_id: Optional[int]
     is_active: bool
-    created_at: datetime
+    created_at: Optional[datetime] = None
     
+    @field_validator('default_hashtags', 'platforms', mode='before')
+    @classmethod
+    def parse_template_lists(cls, v):
+        return parse_json_list(v)
+
     class Config:
         from_attributes = True
 

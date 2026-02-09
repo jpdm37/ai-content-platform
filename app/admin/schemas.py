@@ -70,7 +70,7 @@ class AdminResponse(BaseModel):
     name: str
     role: AdminRole
     is_active: bool
-    created_at: datetime
+    created_at: Optional[datetime] = None
     last_login: Optional[datetime] = None
 
     class Config:
@@ -93,8 +93,8 @@ class UserListItem(BaseModel):
     subscription_status: str
     brands_count: int
     content_count: int
-    created_at: datetime
-    last_login: Optional[datetime]
+    created_at: Optional[datetime] = None
+    last_login: Optional[datetime] = None
 
 
 class UserListResponse(BaseModel):
@@ -110,8 +110,8 @@ class UserDetailResponse(BaseModel):
     full_name: Optional[str]
     is_active: bool
     is_verified: bool
-    created_at: datetime
-    last_login: Optional[datetime]
+    created_at: Optional[datetime] = None
+    last_login: Optional[datetime] = None
     subscription: Optional[dict]
     stats: dict
     recent_activity: List[dict]
@@ -153,7 +153,7 @@ class AuditLogResponse(BaseModel):
     target_id: Optional[int]
     details: Optional[dict]
     ip_address: Optional[str]
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
