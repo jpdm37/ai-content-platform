@@ -250,45 +250,19 @@ async def api_status():
         }
     }
 
-@app.get("/fix-calendar")
-async def fix_calendar():
-    """Fix scheduled_social_posts table"""
+@app.get("/fix-studio-enum")
+async def fix_studio_enum():
+    """Convert studio_assets content_type to VARCHAR"""
     from sqlalchemy import text
     from app.core.database import engine
     
-    statements = [
-        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS generated_content_id INTEGER",
-        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS social_account_id INTEGER",
-        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS brand_id INTEGER",
-        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS caption TEXT",
-        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS hashtags TEXT",
-        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS media_urls TEXT",
-        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS platform_specific TEXT",
-        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS scheduled_for TIMESTAMP",
-        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS timezone VARCHAR(50) DEFAULT 'UTC'",
-        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'scheduled'",
-        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS published_at TIMESTAMP",
-        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS platform_post_id VARCHAR(255)",
-        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS platform_post_url TEXT",
-        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS error_message TEXT",
-        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0",
-        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS engagement_data TEXT",
-        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS last_engagement_sync TIMESTAMP",
-        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
-        "ALTER TABLE scheduled_social_posts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()",
-    ]
-    
-    results = []
-    for sql in statements:
-        try:
-            with engine.connect() as conn:
-                conn.execute(text(sql))
-                conn.commit()
-                results.append({"sql": sql[:50], "status": "OK"})
-        except Exception as e:
-            results.append({"sql": sql[:50], "error": str(e)[:80]})
-    
-    return {"results": results}
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE studio_assets ALTER COLUMN content_type TYPE VARCHAR(50)"))
+            conn.commit()
+        return {"status": "OK", "message": "Converted content_type to VARCHAR"}
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/api/v1/rate-limit-info")
 @limiter.limit("10/minute")
