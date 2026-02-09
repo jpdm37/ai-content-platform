@@ -1,9 +1,24 @@
 """
 Brand Voice AI Pydantic Schemas
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+import json
+
+
+def parse_json_dict(v: Any):
+    if v is None:
+        return None
+    if isinstance(v, dict):
+        return v
+    if isinstance(v, str):
+        try:
+            parsed = json.loads(v)
+            return parsed if isinstance(parsed, dict) else None
+        except (json.JSONDecodeError, TypeError):
+            return None
+    return None
 
 
 # ========== Examples ==========
@@ -25,8 +40,13 @@ class ExampleResponse(BaseModel):
     platform: Optional[str]
     analysis: Optional[Dict[str, Any]]
     is_high_quality: bool
-    created_at: datetime
-    
+    created_at: Optional[datetime] = None
+
+    @field_validator('analysis', mode='before')
+    @classmethod
+    def parse_analysis(cls, v):
+        return parse_json_dict(v)
+
     class Config:
         from_attributes = True
 
@@ -44,7 +64,12 @@ class VoiceResponse(BaseModel):
     last_used_at: Optional[datetime]
     trained_at: Optional[datetime]
     user_satisfaction_avg: Optional[float]
-    
+
+    @field_validator('characteristics', mode='before')
+    @classmethod
+    def parse_characteristics(cls, v):
+        return parse_json_dict(v)
+
     class Config:
         from_attributes = True
 
@@ -61,6 +86,11 @@ class VoiceStatsResponse(BaseModel):
     rated_generations: int
     characteristics: Optional[Dict[str, Any]]
 
+    @field_validator('characteristics', mode='before')
+    @classmethod
+    def parse_stats_characteristics(cls, v):
+        return parse_json_dict(v)
+
 
 # ========== Training ==========
 
@@ -73,6 +103,11 @@ class TrainVoiceResponse(BaseModel):
     success: bool
     message: str
     characteristics: Optional[Dict[str, Any]]
+
+    @field_validator('characteristics', mode='before')
+    @classmethod
+    def parse_train_characteristics(cls, v):
+        return parse_json_dict(v)
 
 
 # ========== Generation ==========

@@ -101,15 +101,16 @@ if settings.rate_limit_enabled:
     logger.info("Rate limiting enabled")
 
 # CORS middleware
+allowed_origins = [
+    settings.frontend_url,
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://ai-content-platform-1-iogw.onrender.com",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        settings.frontend_url,
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "https://ai-content-platform-1-iogw.onrender.com",
-        "*",  # Allow all origins for now
-    ],
+    allow_origins=[origin for origin in allowed_origins if origin],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

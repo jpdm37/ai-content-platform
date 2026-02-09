@@ -5,7 +5,7 @@ Interactive AI assistant for content creation help.
 """
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -73,6 +73,7 @@ class CTARequest(BaseModel):
 @limiter.limit("30/minute")  # Chat is frequently used
 async def chat(
     request_obj: Request,
+    response: Response,
     request: ChatRequest,
     current_user: User = Depends(get_current_verified_user),
     db: Session = Depends(get_db)
@@ -103,6 +104,7 @@ async def chat(
 @limiter.limit("20/minute")
 async def improve_content(
     request: ImproveRequest,
+    response: Response,
     current_user: User = Depends(get_current_verified_user),
     db: Session = Depends(get_db)
 ):

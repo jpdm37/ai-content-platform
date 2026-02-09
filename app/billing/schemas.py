@@ -61,7 +61,7 @@ class SubscriptionResponse(BaseModel):
     trial_end: Optional[datetime]
     generations_used: int
     generations_limit: int
-    created_at: datetime
+    created_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True
@@ -118,8 +118,8 @@ class PaymentResponse(BaseModel):
     currency: str
     status: str
     description: Optional[str]
-    created_at: datetime
-    paid_at: Optional[datetime]
+    created_at: Optional[datetime] = None
+    paid_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True
