@@ -250,22 +250,7 @@ async def api_status():
         }
     }
 
-@app.get("/api/v1/rate-limit-info")
-@limiter.limit("10/minute")
-async def rate_limit_info(request: Request):
-    """Get current rate limit status"""
-    from app.core.rate_limit import get_rate_limit_info
-    return await get_rate_limit_info(request)
-
-
-@app.get("/fix-db")
-async def fix_database():
-    """Add missing database columns across core feature tables."""
-    from sqlalchemy import text
-    from app.core.database import engine
-
-    statements = [
-        @app.get("/fix-subscriptions")
+@app.get("/fix-subscriptions")
 async def fix_subscriptions():
     """Fix subscriptions table"""
     from sqlalchemy import text
@@ -300,18 +285,12 @@ async def fix_subscriptions():
             results.append({"sql": sql[:50], "error": str(e)[:80]})
     
     return {"results": results}
-    ]
 
-    results = []
-    try:
-        with engine.connect() as conn:
-            for sql in statements:
-                try:
-                    conn.execute(text(sql))
-                    results.append({"sql": sql[:80], "status": "OK"})
-                except Exception as exc:
-                    results.append({"sql": sql[:80], "status": f"Error: {str(exc)[:120]}"})
-            conn.commit()
-        return {"message": "Database fix attempted", "results": results}
-    except Exception as exc:
-        return {"error": str(exc)}
+@app.get("/api/v1/rate-limit-info")
+@limiter.limit("10/minute")
+async def rate_limit_info(request: Request):
+    """Get current rate limit status"""
+    from app.core.rate_limit import get_rate_limit_info
+    return await get_rate_limit_info(request)
+
+
