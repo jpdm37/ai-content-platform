@@ -32,9 +32,9 @@ router = APIRouter(prefix="/studio", tags=["content-studio"])
 @router.post("/projects", response_model=ProjectResponse)
 @limiter.limit("5/minute")  # Studio projects are resource-intensive
 async def create_project(
-    request_obj: Request,
+    request: Request,
     response: Response,
-    request: CreateProjectRequest,
+    project_data: CreateProjectRequest,
     current_user: User = Depends(get_current_verified_user),
     db: Session = Depends(get_db)
 ):
@@ -62,16 +62,16 @@ async def create_project(
     try:
         project = await service.create_project(
             user_id=current_user.id,
-            brief=request.brief,
-            name=request.name,
-            target_platforms=[p.value for p in request.target_platforms],
-            content_types=[c.value for c in request.content_types],
-            brand_id=request.brand_id,
-            tone=request.tone.value,
-            num_variations=request.num_variations,
-            include_video=request.include_video,
-            lora_model_id=request.lora_model_id,
-            video_duration=request.video_duration
+            brief=project_data.brief,
+            name=project_data.name,
+            target_platforms=[p.value for p in project_data.target_platforms],
+            content_types=[c.value for c in project_data.content_types],
+            brand_id=project_data.brand_id,
+            tone=project_data.tone.value,
+            num_variations=project_data.num_variations,
+            include_video=project_data.include_video,
+            lora_model_id=project_data.lora_model_id,
+            video_duration=project_data.video_duration
         )
         
         # Record usage
