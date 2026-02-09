@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Sparkles, Plus, Clock, CheckCircle, XCircle, ChevronRight, Image, Video, Hash, MessageSquare, Zap } from 'lucide-react';
+import { Sparkles, Plus, Clock, CheckCircle, XCircle, ChevronRight, Image, Video, Hash, MessageSquare, Zap, Trash2 } from 'lucide-react';
 import { studioApi } from '../../services/api';
 import { Card, Badge, LoadingState, EmptyState, Spinner } from '../../components/ui';
 import toast from 'react-hot-toast';
@@ -25,6 +25,21 @@ export default function StudioProjects() {
       setProjects(res.data.projects);
     } catch (err) { toast.error('Failed to load projects'); }
     setLoading(false);
+  };
+
+  const handleDelete = async (e, projectId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!confirm('Are you sure you want to delete this project?')) return;
+    
+    try {
+      await studioApi.deleteProject(projectId);
+      toast.success('Project deleted');
+      setProjects(projects.filter(p => p.id !== projectId));
+    } catch (err) {
+      toast.error('Failed to delete project');
+    }
   };
 
   if (loading) return <LoadingState message="Loading projects..." />;
@@ -119,7 +134,16 @@ export default function StudioProjects() {
                     </div>
 
                     <div className="text-right">
-                      <p className="text-xs text-silver">{new Date(project.created_at).toLocaleDateString()}</p>
+                      <div className="flex items-center justify-end gap-2">
+                        <p className="text-xs text-silver">{new Date(project.created_at).toLocaleDateString()}</p>
+                        <button
+                          onClick={(e) => handleDelete(e, project.id)}
+                          className="p-1.5 text-silver hover:text-red-500 hover:bg-red-500/10 rounded transition-colors"
+                          title="Delete project"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                       {isGenerating && (
                         <div className="mt-2">
                           <div className="w-24 h-2 bg-slate rounded-full overflow-hidden">
