@@ -250,19 +250,32 @@ async def api_status():
         }
     }
 
-@app.get("/fix-studio-enum")
-async def fix_studio_enum():
-    """Convert studio_assets content_type to VARCHAR"""
+@app.get("/fix-enum-force")
+async def fix_enum_force():
+    """Force fix the content_type enum issue"""
     from sqlalchemy import text
     from app.core.database import engine
     
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("ALTER TABLE studio_assets ALTER COLUMN content_type TYPE VARCHAR(50)"))
-            conn.commit()
-        return {"status": "OK", "message": "Converted content_type to VARCHAR"}
-    except Exception as e:
-        return {"error": str(e)}
+    results = []
+    statements = [
+        # First, drop any existing data in studio_assets
+        "DELETE FROM studio_assets",
+        # Drop the column entirely
+        "ALTER TABLE studio_assets DROP COLUMN IF EXISTS content_type",
+        # Re-add as VARCHAR (no enum restriction)
+        "ALTER TABLE studio_assets ADD COLUMN content_type VARCHAR(50)",
+    ]
+    
+    for sql in statements:
+        try:
+            with engine.connect() as conn:
+                conn.execute(text(sql))
+                conn.commit()
+                results.append({"sql": sql[:60], "status": "OK"})
+        except Exception as e:
+            results.append({"sql": sql[:60], "error": str(e)[:100]})
+    
+    return {"results": results}
 
 @app.get("/api/v1/rate-limit-info")
 @limiter.limit("10/minute")
