@@ -101,8 +101,8 @@ class ContentCalendarService:
         # Get scheduled posts
         scheduled_query = self.db.query(ScheduledSocialPost).filter(
             ScheduledSocialPost.user_id == user_id,
-            ScheduledSocialPost.scheduled_time >= datetime.combine(start_date, datetime.min.time()),
-            ScheduledSocialPost.scheduled_time <= datetime.combine(end_date, datetime.max.time())
+            ScheduledSocialPost.scheduled_for >= datetime.combine(start_date, datetime.min.time()),
+            ScheduledSocialPost.scheduled_for <= datetime.combine(end_date, datetime.max.time())
         )
         
         if brand_id:
@@ -129,13 +129,13 @@ class ContentCalendarService:
         calendar_items = defaultdict(list)
         
         for post in scheduled_posts:
-            date_key = post.scheduled_time.strftime("%Y-%m-%d")
+            date_key = post.scheduled_for.strftime("%Y-%m-%d")
             calendar_items[date_key].append({
                 "id": post.id,
                 "type": "scheduled",
                 "platform": post.platform.value if hasattr(post.platform, 'value') else post.platform,
-                "time": post.scheduled_time.strftime("%H:%M"),
-                "datetime": post.scheduled_time.isoformat(),
+                "time": post.scheduled_for.strftime("%H:%M"),
+                "datetime": post.scheduled_for.isoformat(),
                 "caption_preview": post.caption[:100] + "..." if post.caption and len(post.caption) > 100 else post.caption,
                 "status": post.status.value if hasattr(post.status, 'value') else post.status,
                 "brand_id": post.brand_id,
