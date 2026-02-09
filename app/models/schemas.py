@@ -120,11 +120,13 @@ class CategoryCreate(CategoryBase):
 class CategoryResponse(CategoryBase):
     id: int
     keywords: Optional[List[str]] = None
+    custom_rss_feeds: Optional[List[str]] = None
     image_prompt_template: Optional[str] = None
     caption_prompt_template: Optional[str] = None
     created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
-    @field_validator('keywords', mode='before')
+    @field_validator('keywords', 'custom_rss_feeds', mode='before')
     @classmethod
     def parse_keywords(cls, v):
         return parse_json_list(v)
@@ -197,11 +199,12 @@ class GeneratedContentResponse(BaseModel):
     result_url: Optional[str] = None
     caption: Optional[str] = None
     hashtags: Optional[List[str]] = None
+    generation_params: Optional[List[str]] = None
     error_message: Optional[str] = None
     created_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
-    @field_validator('hashtags', mode='before')
+    @field_validator('hashtags', 'generation_params', mode='before')
     @classmethod
     def parse_hashtags(cls, v):
         return parse_json_list(v)

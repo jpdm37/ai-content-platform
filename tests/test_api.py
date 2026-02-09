@@ -345,3 +345,87 @@ class TestCORS:
 # Run with: pytest tests/test_api.py -v --tb=short
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
+
+
+class TestSchemaJsonParsingCoverage:
+    def test_social_and_template_response_json_parsing(self):
+        from app.social.schemas import SocialAccountResponse, ScheduledPostResponse, PostTemplateResponse
+
+        account = SocialAccountResponse(
+            id=1,
+            platform="instagram",
+            platform_username="u",
+            platform_display_name="U",
+            profile_image_url=None,
+            brand_id=None,
+            is_active=True,
+            last_synced_at=None,
+            last_error=None,
+            platform_data='{"followers": 10}',
+            created_at=None,
+        )
+        assert account.platform_data == {"followers": 10}
+
+        post = ScheduledPostResponse(
+            id=1,
+            social_account_id=1,
+            brand_id=None,
+            generated_content_id=None,
+            caption="c",
+            hashtags='["a", "b"]',
+            media_urls='["https://x"]',
+            scheduled_for="2026-01-01T00:00:00",
+            timezone="UTC",
+            status="scheduled",
+            published_at=None,
+            platform_post_id=None,
+            platform_post_url=None,
+            error_message=None,
+            engagement_data='{"likes": 2}',
+            created_at=None,
+            platform="instagram",
+            account_username="u",
+        )
+        assert post.hashtags == ["a", "b"]
+        assert post.engagement_data == {"likes": 2}
+
+        template = PostTemplateResponse(
+            id=1,
+            name="T",
+            description=None,
+            caption_template="cap",
+            default_hashtags='["h1"]',
+            platforms='["instagram"]',
+            brand_id=None,
+            is_active=True,
+            created_at=None,
+        )
+        assert template.default_hashtags == ["h1"]
+        assert template.platforms == ["instagram"]
+
+
+class TestCodeGuardrails:
+    def test_limited_routes_have_response_param(self):
+        import ast
+        from pathlib import Path
+
+        for path in Path("app/api").glob("*.py"):
+            tree = ast.parse(path.read_text())
+            for node in tree.body:
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    has_limit = any(
+                        isinstance(dec, ast.Call)
+                        and isinstance(dec.func, ast.Attribute)
+                        and dec.func.attr == "limit"
+                        for dec in node.decorator_list
+                    )
+                    if has_limit:
+                        args = [arg.arg for arg in node.args.args]
+                        assert "response" in args, f"{path}:{node.name} missing response"
+
+    def test_cors_no_wildcard_with_credentials(self):
+        from app.main import app
+        cors = next(m for m in app.user_middleware if 'CORSMiddleware' in str(m.cls))
+        allow_origins = cors.kwargs.get("allow_origins", [])
+        assert cors.kwargs.get("allow_credentials") is True
+        assert "*" not in allow_origins

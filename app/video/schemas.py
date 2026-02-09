@@ -1,10 +1,25 @@
 """
 Video Generation Pydantic Schemas
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
+import json
+
+
+def parse_json_dict(v: Any):
+    if v is None:
+        return None
+    if isinstance(v, dict):
+        return v
+    if isinstance(v, str):
+        try:
+            parsed = json.loads(v)
+            return parsed if isinstance(parsed, dict) else None
+        except (json.JSONDecodeError, TypeError):
+            return None
+    return None
 
 
 class VideoStatusEnum(str, Enum):
@@ -87,7 +102,7 @@ class VoiceCloneResponse(BaseModel):
     gender: Optional[str]
     is_ready: bool
     times_used: int
-    created_at: datetime
+    created_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True
@@ -162,8 +177,8 @@ class VideoResponse(BaseModel):
     
     # Timing
     error_message: Optional[str]
-    created_at: datetime
-    processing_completed_at: Optional[datetime]
+    created_at: Optional[datetime] = None
+    processing_completed_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True
@@ -184,6 +199,11 @@ class VideoDetailResponse(VideoResponse):
     video_cost_usd: float
     metadata: Optional[Dict[str, Any]]
 
+
+    @field_validator('metadata', mode='before')
+    @classmethod
+    def parse_metadata(cls, v):
+        return parse_json_dict(v)
 
 class VideoProgressResponse(BaseModel):
     id: int
@@ -246,7 +266,7 @@ class VideoTemplateResponse(BaseModel):
     
     is_public: bool
     is_active: bool
-    created_at: datetime
+    created_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True

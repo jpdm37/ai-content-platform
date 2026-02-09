@@ -1,10 +1,25 @@
 """
 LoRA Training and Avatar Consistency API Schemas
 """
-from pydantic import BaseModel, Field, HttpUrl
-from typing import Optional, List
+from pydantic import BaseModel, Field, field_validator
+from typing import Optional, List, Any
 from datetime import datetime
 from enum import Enum
+import json
+
+
+def parse_json_list(v: Any):
+    if v is None:
+        return None
+    if isinstance(v, list):
+        return v
+    if isinstance(v, str):
+        try:
+            parsed = json.loads(v)
+            return parsed if isinstance(parsed, list) else None
+        except (json.JSONDecodeError, TypeError):
+            return None
+    return None
 
 
 # ========== Enums ==========
@@ -60,6 +75,11 @@ class ReferenceImageUploadResponse(BaseModel):
     validation_errors: Optional[List[str]]
     auto_caption: Optional[str]
     
+    @field_validator('validation_errors', mode='before')
+    @classmethod
+    def parse_validation_errors(cls, v):
+        return parse_json_list(v)
+
     class Config:
         from_attributes = True
 
@@ -73,8 +93,13 @@ class ReferenceImageResponse(ReferenceImageBase):
     quality_score: Optional[float]
     validation_status: str
     validation_errors: Optional[List[str]]
-    created_at: datetime
+    created_at: Optional[datetime] = None
     
+    @field_validator('validation_errors', mode='before')
+    @classmethod
+    def parse_validation_errors(cls, v):
+        return parse_json_list(v)
+
     class Config:
         from_attributes = True
 
@@ -146,7 +171,7 @@ class LoraModelResponse(LoraModelBase):
     lora_weights_url: Optional[str]
     
     # Timestamps
-    created_at: datetime
+    created_at: Optional[datetime] = None
     training_started_at: Optional[datetime]
     training_completed_at: Optional[datetime]
     
@@ -220,7 +245,7 @@ class GeneratedSampleResponse(BaseModel):
     seed: Optional[int]
     user_rating: Optional[int]
     is_test_sample: bool
-    created_at: datetime
+    created_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True

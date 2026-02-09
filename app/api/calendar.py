@@ -7,7 +7,7 @@ Endpoints for content calendar management.
 
 from typing import Optional, List
 from datetime import date, datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -232,6 +232,7 @@ async def get_suggested_slots(
 @limiter.limit("30/minute")
 async def schedule_content(
     request: ScheduleContentRequest,
+    response: Response,
     current_user: User = Depends(get_current_verified_user),
     db: Session = Depends(get_db)
 ):
@@ -307,6 +308,7 @@ async def cancel_scheduled_post(
 @limiter.limit("10/minute")
 async def fill_content_gap(
     request: FillGapRequest,
+    response: Response,
     current_user: User = Depends(get_current_verified_user),
     db: Session = Depends(get_db)
 ):

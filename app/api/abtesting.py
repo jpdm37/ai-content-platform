@@ -6,7 +6,7 @@ Endpoints for creating and managing A/B tests.
 """
 
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -145,6 +145,7 @@ async def get_tests(
 @limiter.limit("10/minute")
 async def create_test(
     request: CreateTestRequest,
+    response: Response,
     current_user: User = Depends(get_current_verified_user),
     db: Session = Depends(get_db)
 ):
@@ -178,6 +179,7 @@ async def create_test(
 @limiter.limit("10/minute")
 async def create_from_template(
     request: CreateFromTemplateRequest,
+    response: Response,
     current_user: User = Depends(get_current_verified_user),
     db: Session = Depends(get_db)
 ):
