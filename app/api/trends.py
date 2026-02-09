@@ -2,7 +2,7 @@
 Trend API Routes
 """
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request, Response
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 
@@ -111,6 +111,7 @@ async def get_trend(
 @limiter.limit("5/minute")  # Rate limit scraping - expensive operation
 async def scrape_trends(
     request: Request,
+    response: Response,
     scrape_request: ScrapeRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),

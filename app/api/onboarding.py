@@ -6,7 +6,7 @@ Endpoints for guided user onboarding flow.
 """
 
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -138,6 +138,7 @@ async def get_brand_templates(
 @limiter.limit("5/minute")
 async def create_brand_from_template(
     request_obj: Request,
+    response: Response,
     request: CreateBrandRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -160,6 +161,7 @@ async def create_brand_from_template(
 @limiter.limit("5/minute")
 async def create_quick_brand(
     request_obj: Request,
+    response: Response,
     request: QuickBrandRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -178,6 +180,7 @@ async def create_quick_brand(
 @limiter.limit("3/minute")
 async def generate_first_content(
     request_obj: Request,
+    response: Response,
     request: GenerateContentRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)

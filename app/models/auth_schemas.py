@@ -52,8 +52,8 @@ class UserResponse(UserBase):
     auth_provider: AuthProvider
     has_openai_key: bool = False
     has_replicate_key: bool = False
-    created_at: datetime
-    last_login: Optional[datetime]
+    created_at: Optional[datetime] = None
+    last_login: Optional[datetime] = None
 
     class Config:
         from_attributes = True

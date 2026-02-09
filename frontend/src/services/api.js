@@ -27,11 +27,11 @@ api.interceptors.response.use(
 
 // ============ Brands API ============
 export const brandsApi = {
-  list: () => api.get('/brands'),
-  getAll: () => api.get('/brands'),
+  list: () => api.get('/brands/'),
+  getAll: () => api.get('/brands/'),
   get: (id) => api.get(`/brands/${id}`),
   getById: (id) => api.get(`/brands/${id}`),
-  create: (data) => api.post('/brands', data),
+  create: (data) => api.post('/brands/', data),
   update: (id, data) => api.put(`/brands/${id}`, data),
   delete: (id) => api.delete(`/brands/${id}`),
   getCategories: (id) => api.get(`/brands/${id}/categories`),
@@ -41,16 +41,16 @@ export const brandsApi = {
 
 // ============ Categories API ============
 export const categoriesApi = {
-  getAll: () => api.get('/categories'),
+  getAll: () => api.get('/categories/'),
   getById: (id) => api.get(`/categories/${id}`),
-  create: (data) => api.post('/categories', data),
+  create: (data) => api.post('/categories/', data),
   delete: (id) => api.delete(`/categories/${id}`),
   seed: () => api.post('/categories/seed'),
 };
 
 // ============ Trends API ============
 export const trendsApi = {
-  getAll: (params) => api.get('/trends', { params }),
+  getAll: (params) => api.get('/trends/', { params }),
   getTop: (params) => api.get('/trends/top', { params }),
   getRecent: (params) => api.get('/trends/recent', { params }),
   getById: (id) => api.get(`/trends/${id}`),
@@ -62,8 +62,8 @@ export const trendsApi = {
 // ============ Generation API ============
 export const generateApi = {
   avatar: (data) => api.post('/generate/avatar', data),
-  content: (data) => api.post('/generate/content', data),
-  getAll: (params) => api.get('/generate/content', { params }),
+  content: (data) => api.post('/generate/content/', data),
+  getAll: (params) => api.get('/generate/content/', { params }),
   getById: (id) => api.get(`/generate/content/${id}`),
   delete: (id) => api.delete(`/generate/content/${id}`),
   getByBrand: (brandId, limit = 20) => api.get(`/generate/brand/${brandId}/content`, { params: { limit } }),
@@ -78,9 +78,9 @@ export const statusApi = {
 // ============ LoRA Training API ============
 export const loraApi = {
   // Models
-  listModels: (params) => api.get('/lora/models', { params }),
+  listModels: (params) => api.get('/lora/models/', { params }),
   getModel: (id) => api.get(`/lora/models/${id}`),
-  createModel: (data) => api.post('/lora/models', data),
+  createModel: (data) => api.post('/lora/models/', data),
   updateModel: (id, data) => api.put(`/lora/models/${id}`, data),
   deleteModel: (id) => api.delete(`/lora/models/${id}`),
   
@@ -115,7 +115,7 @@ export const loraApi = {
 // ============ Billing API ============
 export const billingApi = {
   // Plans
-  listPlans: () => api.get('/billing/plans'),
+  listPlans: () => api.get('/billing/plans/'),
   getPlan: (tier) => api.get(`/billing/plans/${tier}`),
   
   // Subscription
@@ -142,7 +142,7 @@ export const billingApi = {
 // ============ Social Media API ============
 export const socialApi = {
   // Accounts
-  listAccounts: (params) => api.get('/social/accounts', { params }),
+  listAccounts: (params) => api.get('/social/accounts/', { params }),
   getAccount: (id) => api.get(`/social/accounts/${id}`),
   getConnectUrl: (platform, brandId) => api.get(`/social/connect/${platform}/url`, { params: { brand_id: brandId } }),
   connectCallback: (platform, data) => api.post(`/social/connect/${platform}/callback`, data),
@@ -170,8 +170,8 @@ export const socialApi = {
   getBestTimes: (accountId) => api.get(`/social/accounts/${accountId}/best-times`),
   
   // Templates
-  createTemplate: (data) => api.post('/social/templates', data),
-  listTemplates: (params) => api.get('/social/templates', { params }),
+  createTemplate: (data) => api.post('/social/templates/', data),
+  listTemplates: (params) => api.get('/social/templates/', { params }),
   deleteTemplate: (id) => api.delete(`/social/templates/${id}`)
 };
 
@@ -183,7 +183,7 @@ export const videoApi = {
   generateBatch: (data) => api.post('/video/generate/batch', data),
   
   // Videos
-  listVideos: (params) => api.get('/video/videos', { params }),
+  listVideos: (params) => api.get('/video/videos/', { params }),
   getVideo: (id) => api.get(`/video/videos/${id}`),
   getProgress: (id) => api.get(`/video/videos/${id}/progress`),
   cancelVideo: (id) => api.post(`/video/videos/${id}/cancel`),
@@ -199,8 +199,8 @@ export const videoApi = {
   deleteVoiceClone: (id) => api.delete(`/video/voices/clones/${id}`),
   
   // Templates
-  listTemplates: (params) => api.get('/video/templates', { params }),
-  createTemplate: (data) => api.post('/video/templates', data),
+  listTemplates: (params) => api.get('/video/templates/', { params }),
+  createTemplate: (data) => api.post('/video/templates/', data),
   deleteTemplate: (id) => api.delete(`/video/templates/${id}`),
   
   // Presets
@@ -211,8 +211,8 @@ export const videoApi = {
 // ============ Content Studio API ============
 export const studioApi = {
   // Projects
-  createProject: (data) => api.post('/studio/projects', data),
-  listProjects: (params) => api.get('/studio/projects', { params }),
+  createProject: (data) => api.post('/studio/projects/', data),
+  listProjects: (params) => api.get('/studio/projects/', { params }),
   getProject: (id) => api.get(`/studio/projects/${id}`),
   getProjectProgress: (id) => api.get(`/studio/projects/${id}/progress`),
   deleteProject: (id) => api.delete(`/studio/projects/${id}`),
@@ -227,8 +227,8 @@ export const studioApi = {
   quickGenerate: (data) => api.post('/studio/quick-generate', data),
   
   // Templates
-  listTemplates: (params) => api.get('/studio/templates', { params }),
-  createTemplate: (data) => api.post('/studio/templates', data),
+  listTemplates: (params) => api.get('/studio/templates/', { params }),
+  createTemplate: (data) => api.post('/studio/templates/', data),
   deleteTemplate: (id) => api.delete(`/studio/templates/${id}`),
   
   // Presets
@@ -270,7 +270,7 @@ export const analyticsApi = {
   getVideos: (days) => api.get('/analytics/videos', { params: { days } }),
   getStudio: (days) => api.get('/analytics/studio', { params: { days } }),
   getCosts: (days) => api.get('/analytics/costs', { params: { days } }),
-  getBestTimes: () => api.get('/analytics/best-times'),
+  getBestTimes: () => api.get('/analytics/best-times/'),
   getDashboard: (days) => api.get('/analytics/dashboard', { params: { days } })
 };
 
@@ -283,7 +283,7 @@ export const assistantApi = {
   variations: (data) => api.post('/assistant/variations', data),
   optimize: (data) => api.post('/assistant/optimize', data),
   suggestCta: (data) => api.post('/assistant/suggest-cta', data),
-  getCapabilities: () => api.get('/assistant/capabilities')
+  getCapabilities: () => api.get('/assistant/capabilities/')
 };
 
 // ============ Admin API ============

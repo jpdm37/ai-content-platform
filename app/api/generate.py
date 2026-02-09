@@ -2,7 +2,7 @@
 Content Generation API Routes - Protected by Authentication
 """
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -36,6 +36,7 @@ def get_user_api_keys(user: User) -> tuple[str, str]:
 @limiter.limit("10/minute")  # Avatar generation is resource-intensive
 async def generate_avatar(
     request_obj: Request,
+    response: Response,
     request: GenerateAvatarRequest,
     current_user: User = Depends(get_current_verified_user),
     db: Session = Depends(get_db)
@@ -85,6 +86,7 @@ async def generate_avatar(
 @limiter.limit("20/minute")  # Content generation limit
 async def generate_content(
     request_obj: Request,
+    response: Response,
     request: GenerateContentRequest,
     current_user: User = Depends(get_current_verified_user),
     db: Session = Depends(get_db)
