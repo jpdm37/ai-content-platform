@@ -250,20 +250,37 @@ async def api_status():
         }
     }
 
-@app.get("/fix-enum-force")
-async def fix_enum_force():
-    """Force fix the content_type enum issue"""
+@app.get("/fix-enum-nuclear")
+async def fix_enum_nuclear():
+    """Nuclear option - completely remove enum"""
     from sqlalchemy import text
     from app.core.database import engine
     
     results = []
+    
     statements = [
-        # First, drop any existing data in studio_assets
-        "DELETE FROM studio_assets",
-        # Drop the column entirely
-        "ALTER TABLE studio_assets DROP COLUMN IF EXISTS content_type",
-        # Re-add as VARCHAR (no enum restriction)
-        "ALTER TABLE studio_assets ADD COLUMN content_type VARCHAR(50)",
+        "DROP TABLE IF EXISTS studio_assets CASCADE",
+        "DROP TYPE IF EXISTS contenttype CASCADE",
+        "DROP TYPE IF EXISTS \"ContentType\" CASCADE",
+        """CREATE TABLE studio_assets (
+            id SERIAL PRIMARY KEY,
+            project_id INTEGER,
+            content_type VARCHAR(50),
+            text_content TEXT,
+            media_url TEXT,
+            thumbnail_url TEXT,
+            platform VARCHAR(50),
+            variation_number INTEGER DEFAULT 1,
+            is_favorite BOOLEAN DEFAULT FALSE,
+            is_selected BOOLEAN DEFAULT FALSE,
+            user_rating INTEGER,
+            ai_model_used VARCHAR(100),
+            prompt_used TEXT,
+            cost_usd FLOAT,
+            status VARCHAR(50) DEFAULT 'pending',
+            error_message TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        )""",
     ]
     
     for sql in statements:
