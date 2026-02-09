@@ -250,28 +250,20 @@ async def api_status():
         }
     }
 
-@app.get("/fix-subscriptions")
-async def fix_subscriptions():
-    """Fix subscriptions table"""
+@app.get("/fix-usage")
+async def fix_usage():
+    """Fix usage_records table"""
     from sqlalchemy import text
     from app.core.database import engine
     
     statements = [
-        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS tier VARCHAR(50) DEFAULT 'free'",
-        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active'",
-        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(255)",
-        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS stripe_subscription_id VARCHAR(255)",
-        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS stripe_price_id VARCHAR(255)",
-        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS current_period_start TIMESTAMP",
-        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMP",
-        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOLEAN DEFAULT FALSE",
-        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS canceled_at TIMESTAMP",
-        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_start TIMESTAMP",
-        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_end TIMESTAMP",
-        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS generations_used INTEGER DEFAULT 0",
-        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS generations_reset_at TIMESTAMP",
-        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
-        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()",
+        "ALTER TABLE usage_records ADD COLUMN IF NOT EXISTS subscription_id INTEGER",
+        "ALTER TABLE usage_records ADD COLUMN IF NOT EXISTS user_id INTEGER",
+        "ALTER TABLE usage_records ADD COLUMN IF NOT EXISTS usage_type VARCHAR(100)",
+        "ALTER TABLE usage_records ADD COLUMN IF NOT EXISTS quantity INTEGER DEFAULT 1",
+        "ALTER TABLE usage_records ADD COLUMN IF NOT EXISTS cost_credits INTEGER DEFAULT 0",
+        "ALTER TABLE usage_records ADD COLUMN IF NOT EXISTS metadata TEXT",
+        "ALTER TABLE usage_records ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
     ]
     
     results = []
