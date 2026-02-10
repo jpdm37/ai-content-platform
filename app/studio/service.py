@@ -186,7 +186,7 @@ class ContentStudioService:
     
     # ==================== Content Generation ====================
     
-async def _generate_captions(self, project: StudioProject, brand_voice: str) -> float:
+    async def _generate_captions(self, project: StudioProject, brand_voice: str) -> float:
         """Generate multiple caption variations."""
         cost = 0.0
         tone_desc = TONE_DESCRIPTIONS.get(project.tone, project.tone)
