@@ -188,18 +188,18 @@ class ContentStudioService:
     
     async def _generate_captions(self, project: StudioProject, brand_voice: str) -> float:
     """Generate multiple caption variations."""
-    cost = 0.0
-    tone_desc = TONE_DESCRIPTIONS.get(project.tone, project.tone)
+        cost = 0.0
+        tone_desc = TONE_DESCRIPTIONS.get(project.tone, project.tone)
     
     # Use gpt-4o-mini for captions - 20x cheaper, quality is sufficient
-    model = "gpt-4o-mini"
+        model = "gpt-4o-mini"
     
     # Generate captions once (not per platform) - use first platform's spec
-    primary_platform = project.target_platforms[0] if project.target_platforms else "instagram"
-    platform_spec = PLATFORM_SPECS.get(primary_platform, PLATFORM_SPECS["instagram"])
+        primary_platform = project.target_platforms[0] if project.target_platforms else "instagram"
+        platform_spec = PLATFORM_SPECS.get(primary_platform, PLATFORM_SPECS["instagram"])
     
     # Optimized prompt - shorter but effective
-    prompt = f"""Generate {project.num_variations} unique social media captions.
+        prompt = f"""Generate {project.num_variations} unique social media captions.
 
 Topic: {project.brief}
 Tone: {tone_desc}
