@@ -110,7 +110,7 @@ class StudioAsset(Base):
     project_id = Column(Integer, ForeignKey('studio_projects.id', ondelete='CASCADE'), nullable=False, index=True)
     
     # Asset type and content
-    content_type = Column(Enum(ContentType), nullable=False)
+    content_type = Column(String(50), nullable=False)
     
     # For text content (captions, hashtags, hooks, CTAs)
     text_content = Column(Text, nullable=True)
