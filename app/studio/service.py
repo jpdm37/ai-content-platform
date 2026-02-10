@@ -286,10 +286,10 @@ Return only the hooks, numbered 1-5:"""
             logger.error(f"Hook generation failed: {e}")
             return 0.0
     
-   async def _generate_hashtags(self, project: StudioProject) -> float:
-    """Generate hashtags (10 total, not per platform)."""
-    
-    prompt = f"""Generate 10 highly relevant hashtags for social media.
+    async def _generate_hashtags(self, project: StudioProject) -> float:
+        """Generate hashtags (10 total)."""
+        
+        prompt = f"""Generate 10 highly relevant hashtags for social media.
 
 Content topic: {project.brief}
 
@@ -299,31 +299,31 @@ Requirements:
 - Format: #hashtag (one per line)
 - No explanations, just hashtags"""
 
-    try:
-        response = await self.openai.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=300,
-            temperature=0.7
-        )
+        try:
+            response = await self.openai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=300,
+                temperature=0.7
+            )
+            
+            content = response.choices[0].message.content
+            hashtags = [h.strip() for h in content.split('\n') if h.strip().startswith('#')]
+            
+            asset = StudioAsset(
+                project_id=project.id,
+                content_type="hashtags",
+                text_content='\n'.join(hashtags[:10]),
+                ai_model_used="gpt-4o-mini",
+                cost_usd=0.001
+            )
+            self.db.add(asset)
+            self.db.commit()
+            
+        except Exception as e:
+            logger.error(f"Hashtag generation failed: {e}")
         
-        content = response.choices[0].message.content
-        hashtags = [h.strip() for h in content.split('\n') if h.strip().startswith('#')]
-        
-        asset = StudioAsset(
-            project_id=project.id,
-            content_type="hashtags",
-            text_content='\n'.join(hashtags[:10]),
-            ai_model_used="gpt-4o-mini",
-            cost_usd=0.001
-        )
-        self.db.add(asset)
-        self.db.commit()
-        
-    except Exception as e:
-        logger.error(f"Hashtag generation failed: {e}")
-    
-    return 0.001
+        return 0.001
     
     async def _generate_ctas(self, project: StudioProject) -> float:
         """Generate call-to-action phrases."""
@@ -369,7 +369,7 @@ Return only the CTAs, numbered 1-5:"""
             return 0.0
     
     async def _generate_images(self, project: StudioProject, brand_voice: str) -> float:
-        """Generate image options using DALL-E or Flux."""
+        """Generate image options using AI."""
         cost = 0.0
         
         # First, generate an optimized image prompt
@@ -588,7 +588,7 @@ Return only the script (no stage directions or notes):"""
         self,
         project_id: int,
         user_id: int,
-        content_type: Optional[ContentType] = None,
+        content_type: Optional[str] = None,
         platform: Optional[str] = None
     ) -> List[StudioAsset]:
         """Get assets for a project."""
