@@ -225,7 +225,7 @@ Each caption needs: hook, value, CTA. Number them 1-{project.num_variations}."""
                 for i, caption in enumerate(variations[:project.num_variations], 1):
                     asset = StudioAsset(
                         project_id=project.id,
-                        content_type=ContentType.CAPTION,
+                        content_type="caption",
                         text_content=caption.strip(),
                         platform=platform,
                         variation_number=i,
@@ -272,7 +272,7 @@ Return only the hooks, numbered 1-5:"""
             for i, hook in enumerate(hooks[:5], 1):
                 asset = StudioAsset(
                     project_id=project.id,
-                    content_type=ContentType.HOOK,
+                    content_type="hook",
                     text_content=hook.strip(),
                     variation_number=i,
                     ai_model_used="gpt-4o",
@@ -316,7 +316,7 @@ Requirements:
                 
                 asset = StudioAsset(
                     project_id=project.id,
-                    content_type=ContentType.HASHTAGS,
+                    content_type="hashtags",
                     text_content='\n'.join(hashtags[:platform_spec['hashtag_limit']]),
                     platform=platform,
                     ai_model_used="gpt-4o-mini",
@@ -358,7 +358,7 @@ Return only the CTAs, numbered 1-5:"""
             for i, cta in enumerate(ctas[:5], 1):
                 asset = StudioAsset(
                     project_id=project.id,
-                    content_type=ContentType.CTA,
+                    content_type="cta",
                     text_content=cta.strip(),
                     variation_number=i,
                     ai_model_used="gpt-4o-mini",
@@ -415,7 +415,7 @@ Return only the image generation prompt (no explanations):"""
                     if result.get("image_url"):
                         asset = StudioAsset(
                             project_id=project.id,
-                            content_type=ContentType.IMAGE,
+                            content_type="image",
                             media_url=result["image_url"],
                             variation_number=i + 1,
                             ai_model_used=result.get("model", "flux"),
@@ -481,7 +481,7 @@ Return only the script (no stage directions or notes):"""
             # Create asset reference
             asset = StudioAsset(
                 project_id=project.id,
-                content_type=ContentType.VIDEO,
+                content_type="video",
                 text_content=script,
                 media_url=video.video_url,  # Will be populated when video completes
                 ai_model_used="sadtalker",
@@ -505,7 +505,7 @@ Return only the script (no stage directions or notes):"""
         # Get all captions
         captions = self.db.query(StudioAsset).filter(
             StudioAsset.project_id == project.id,
-            StudioAsset.content_type == ContentType.CAPTION
+            StudioAsset.content_type == "caption"
         ).all()
         
         for caption in captions:
