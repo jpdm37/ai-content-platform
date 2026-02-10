@@ -265,6 +265,29 @@ async def delete_all_projects():
     except Exception as e:
         return {"error": str(e)}
 
+@app.get("/fix-studio-assets")
+async def fix_studio_assets():
+    """Fix studio_assets table columns"""
+    from sqlalchemy import text
+    from app.core.database import engine
+    
+    statements = [
+        "ALTER TABLE studio_assets ADD COLUMN IF NOT EXISTS platform_optimized TEXT",
+        "ALTER TABLE studio_assets ADD COLUMN IF NOT EXISTS generation_params TEXT",
+    ]
+    
+    results = []
+    for sql in statements:
+        try:
+            with engine.connect() as conn:
+                conn.execute(text(sql))
+                conn.commit()
+                results.append({"sql": sql[:50], "status": "OK"})
+        except Exception as e:
+            results.append({"sql": sql[:50], "error": str(e)[:80]})
+    
+    return {"results": results}
+
 @app.get("/api/v1/rate-limit-info")
 @limiter.limit("10/minute")
 async def rate_limit_info(request: Request):
