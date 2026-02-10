@@ -369,11 +369,34 @@ Return only the CTAs, numbered 1-5:"""
             return 0.0
     
     async def _generate_images(self, project: StudioProject, brand_voice: str) -> float:
-        """Generate image options using AI."""
+        """Generate image options using AI - with LoRA avatar if available."""
         cost = 0.0
         
+        # Check if we have a LoRA model for avatar generation
+        lora_model = None
+        if project.lora_model_id:
+            lora_model = self.db.query(LoraModel).filter(LoraModel.id == project.lora_model_id).first()
+            if lora_model and lora_model.status != 'completed':
+                logger.warning(f"LoRA model {project.lora_model_id} not ready, falling back to generic images")
+                lora_model = None
+        
         # First, generate an optimized image prompt
-        prompt_request = f"""Create a detailed image generation prompt for this content:
+        if lora_model:
+            prompt_request = f"""Create a detailed image prompt for a social media influencer photo.
+
+Topic: {project.brief}
+Brand: {brand_voice or 'Modern, professional'}
+
+The image should show a person (the brand's influencer) in a setting that:
+- Relates to the topic/product being promoted
+- Works well on social media (clean, not too busy)
+- Looks natural and authentic
+- Is professional and high-quality
+
+Focus on describing the scene, setting, lighting, and mood. Do NOT describe the person's appearance.
+Return only the image generation prompt (no explanations):"""
+        else:
+            prompt_request = f"""Create a detailed image generation prompt for this content:
 
 Topic: {project.brief}
 Brand: {brand_voice or 'Modern, professional'}
@@ -396,30 +419,61 @@ Return only the image generation prompt (no explanations):"""
             
             image_prompt = response.choices[0].message.content.strip()
             
-            # Generate images (using content generator)
+            # Generate images
             for i in range(min(project.num_variations, 3)):
                 try:
+                    # Add delay between requests to avoid rate limiting
+                    if i > 0:
+                        await asyncio.sleep(12)  # Wait 12 seconds between images
+                    
                     # Add variation to prompt
                     varied_prompt = f"{image_prompt}, variation {i+1}, unique composition"
                     
-                    result = await self.content_generator.generate_image(
-                        prompt=varied_prompt,
-                        style="professional"
-                    )
-                    
-                    if result.get("image_url"):
-                        asset = StudioAsset(
-                            project_id=project.id,
-                            content_type="image",
-                            media_url=result["image_url"],
-                            variation_number=i + 1,
-                            ai_model_used=result.get("model", "flux"),
-                            prompt_used=varied_prompt,
-                            cost_usd=0.02
+                    if lora_model:
+                        # Use LoRA model to generate with avatar
+                        from app.lora.training_service import LoraTrainingService
+                        lora_service = LoraTrainingService(self.db, settings.replicate_api_token)
+                        
+                        samples = await lora_service.generate_with_lora(
+                            lora_model=lora_model,
+                            prompt=varied_prompt,
+                            num_outputs=1,
+                            aspect_ratio="1:1"
                         )
-                        self.db.add(asset)
-                        project.images_generated += 1
-                        cost += 0.02
+                        
+                        if samples and samples[0].image_url:
+                            asset = StudioAsset(
+                                project_id=project.id,
+                                content_type="image",
+                                media_url=samples[0].image_url,
+                                variation_number=i + 1,
+                                ai_model_used=f"flux-lora ({lora_model.name})",
+                                prompt_used=f"{lora_model.trigger_word} {varied_prompt}",
+                                cost_usd=0.003  # LoRA generation cost
+                            )
+                            self.db.add(asset)
+                            project.images_generated += 1
+                            cost += 0.003
+                    else:
+                        # Use generic image generation
+                        result = await self.content_generator.generate_image(
+                            prompt=varied_prompt,
+                            style="professional"
+                        )
+                        
+                        if result.get("image_url"):
+                            asset = StudioAsset(
+                                project_id=project.id,
+                                content_type="image",
+                                media_url=result["image_url"],
+                                variation_number=i + 1,
+                                ai_model_used=result.get("model", "sdxl"),
+                                prompt_used=varied_prompt,
+                                cost_usd=0.02
+                            )
+                            self.db.add(asset)
+                            project.images_generated += 1
+                            cost += 0.02
                         
                 except Exception as e:
                     logger.error(f"Image {i+1} generation failed: {e}")
