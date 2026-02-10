@@ -250,49 +250,20 @@ async def api_status():
         }
     }
 
-@app.get("/fix-enum-nuclear")
-async def fix_enum_nuclear():
-    """Nuclear option - completely remove enum"""
+@app.get("/delete-all-projects")
+async def delete_all_projects():
+    """Delete all studio projects"""
     from sqlalchemy import text
     from app.core.database import engine
     
-    results = []
-    
-    statements = [
-        "DROP TABLE IF EXISTS studio_assets CASCADE",
-        "DROP TYPE IF EXISTS contenttype CASCADE",
-        "DROP TYPE IF EXISTS \"ContentType\" CASCADE",
-        """CREATE TABLE studio_assets (
-            id SERIAL PRIMARY KEY,
-            project_id INTEGER,
-            content_type VARCHAR(50),
-            text_content TEXT,
-            media_url TEXT,
-            thumbnail_url TEXT,
-            platform VARCHAR(50),
-            variation_number INTEGER DEFAULT 1,
-            is_favorite BOOLEAN DEFAULT FALSE,
-            is_selected BOOLEAN DEFAULT FALSE,
-            user_rating INTEGER,
-            ai_model_used VARCHAR(100),
-            prompt_used TEXT,
-            cost_usd FLOAT,
-            status VARCHAR(50) DEFAULT 'pending',
-            error_message TEXT,
-            created_at TIMESTAMP DEFAULT NOW()
-        )""",
-    ]
-    
-    for sql in statements:
-        try:
-            with engine.connect() as conn:
-                conn.execute(text(sql))
-                conn.commit()
-                results.append({"sql": sql[:60], "status": "OK"})
-        except Exception as e:
-            results.append({"sql": sql[:60], "error": str(e)[:100]})
-    
-    return {"results": results}
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("DELETE FROM studio_assets"))
+            conn.execute(text("DELETE FROM studio_projects"))
+            conn.commit()
+        return {"status": "OK", "message": "All projects deleted"}
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/api/v1/rate-limit-info")
 @limiter.limit("10/minute")
