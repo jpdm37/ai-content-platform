@@ -187,18 +187,19 @@ class ContentStudioService:
     # ==================== Content Generation ====================
     
     async def _generate_captions(self, project: StudioProject, brand_voice: str) -> float:
-        """Generate multiple caption variations."""
-        cost = 0.0
-        tone_desc = TONE_DESCRIPTIONS.get(project.tone, project.tone)
-        
-        # Use gpt-4o-mini for captions - 20x cheaper, quality is sufficient
-        model = "gpt-4o-mini"
-        
-        for platform in project.target_platforms:
-            platform_spec = PLATFORM_SPECS.get(platform, PLATFORM_SPECS["instagram"])
-            
-            # Optimized prompt - shorter but effective
-            prompt = f"""Generate {project.num_variations} unique {platform} captions.
+    """Generate multiple caption variations."""
+    cost = 0.0
+    tone_desc = TONE_DESCRIPTIONS.get(project.tone, project.tone)
+    
+    # Use gpt-4o-mini for captions - 20x cheaper, quality is sufficient
+    model = "gpt-4o-mini"
+    
+    # Generate captions once (not per platform) - use first platform's spec
+    primary_platform = project.target_platforms[0] if project.target_platforms else "instagram"
+    platform_spec = PLATFORM_SPECS.get(primary_platform, PLATFORM_SPECS["instagram"])
+    
+    # Optimized prompt - shorter but effective
+    prompt = f"""Generate {project.num_variations} unique social media captions.
 
 Topic: {project.brief}
 Tone: {tone_desc}
@@ -207,41 +208,40 @@ Max: {platform_spec['max_chars']} chars
 
 Each caption needs: hook, value, CTA. Number them 1-{project.num_variations}."""
 
-            try:
-                response = await self.openai.chat.completions.create(
-                    model=model,
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=1000,  # Reduced from 2000
-                    temperature=0.8
-                )
-                
-                content = response.choices[0].message.content
-                # gpt-4o-mini costs ~$0.0006 per 1K tokens vs $0.01 for gpt-4o
-                cost += 0.0006
-                
-                # Parse variations
-                variations = self._parse_numbered_list(content)
-                
-                for i, caption in enumerate(variations[:project.num_variations], 1):
-                    asset = StudioAsset(
-                        project_id=project.id,
-                        content_type="caption",
-                        text_content=caption.strip(),
-                        platform=platform,
-                        variation_number=i,
-                        ai_model_used=model,
-                        prompt_used=prompt,
-                        cost_usd=cost / len(variations)
-                    )
-                    self.db.add(asset)
-                    project.captions_generated += 1
-                
-                self.db.commit()
-                
-            except Exception as e:
-                logger.error(f"Caption generation failed for {platform}: {e}")
+    try:
+        response = await self.openai.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1000,
+            temperature=0.8
+        )
         
-        return cost
+        content = response.choices[0].message.content
+        cost += 0.0006
+        
+        # Parse variations
+        variations = self._parse_numbered_list(content)
+        
+        for i, caption in enumerate(variations[:project.num_variations], 1):
+            asset = StudioAsset(
+                project_id=project.id,
+                content_type="caption",
+                text_content=caption.strip(),
+                platform=primary_platform,
+                variation_number=i,
+                ai_model_used=model,
+                prompt_used=prompt,
+                cost_usd=cost / len(variations)
+            )
+            self.db.add(asset)
+            project.captions_generated += 1
+        
+        self.db.commit()
+        
+    except Exception as e:
+        logger.error(f"Caption generation failed: {e}")
+    
+    return cost
     
     async def _generate_hooks(self, project: StudioProject, brand_voice: str) -> float:
         """Generate attention-grabbing hooks."""
@@ -287,13 +287,10 @@ Return only the hooks, numbered 1-5:"""
             logger.error(f"Hook generation failed: {e}")
             return 0.0
     
-    async def _generate_hashtags(self, project: StudioProject) -> float:
-        """Generate platform-specific hashtags."""
-        
-        for platform in project.target_platforms:
-            platform_spec = PLATFORM_SPECS.get(platform, PLATFORM_SPECS["instagram"])
-            
-            prompt = f"""Generate {platform_spec['hashtag_limit']} highly relevant hashtags for {platform}.
+   async def _generate_hashtags(self, project: StudioProject) -> float:
+    """Generate hashtags (10 total, not per platform)."""
+    
+    prompt = f"""Generate 10 highly relevant hashtags for social media.
 
 Content topic: {project.brief}
 
@@ -303,32 +300,31 @@ Requirements:
 - Format: #hashtag (one per line)
 - No explanations, just hashtags"""
 
-            try:
-                response = await self.openai.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=300,
-                    temperature=0.7
-                )
-                
-                content = response.choices[0].message.content
-                hashtags = [h.strip() for h in content.split('\n') if h.strip().startswith('#')]
-                
-                asset = StudioAsset(
-                    project_id=project.id,
-                    content_type="hashtags",
-                    text_content='\n'.join(hashtags[:platform_spec['hashtag_limit']]),
-                    platform=platform,
-                    ai_model_used="gpt-4o-mini",
-                    cost_usd=0.001
-                )
-                self.db.add(asset)
-                
-            except Exception as e:
-                logger.error(f"Hashtag generation failed for {platform}: {e}")
+    try:
+        response = await self.openai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=300,
+            temperature=0.7
+        )
         
+        content = response.choices[0].message.content
+        hashtags = [h.strip() for h in content.split('\n') if h.strip().startswith('#')]
+        
+        asset = StudioAsset(
+            project_id=project.id,
+            content_type="hashtags",
+            text_content='\n'.join(hashtags[:10]),
+            ai_model_used="gpt-4o-mini",
+            cost_usd=0.001
+        )
+        self.db.add(asset)
         self.db.commit()
-        return 0.005
+        
+    except Exception as e:
+        logger.error(f"Hashtag generation failed: {e}")
+    
+    return 0.001
     
     async def _generate_ctas(self, project: StudioProject) -> float:
         """Generate call-to-action phrases."""
