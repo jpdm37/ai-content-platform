@@ -570,9 +570,6 @@ Return only the script (no stage directions or notes):"""
         items = [p.strip() for p in text.split('\n') if p.strip() and len(p.strip()) > 50]
         
         return items if items else [text.strip()]
-```
-
----
     
     # ==================== Project Retrieval ====================
     
