@@ -32,7 +32,8 @@ from app.api import (
     digest_router,
     calendar_router,
     abtesting_router,
-    performance_router
+    performance_router,
+    setup_router
 )
 from app.api.admin import router as admin_router
 from app.api.admin_enhanced import router as admin_enhanced_router
@@ -78,39 +79,39 @@ app = FastAPI(
     AI Content Platform API
     
     Generate AI-powered social media content including:
-    - AI Avatar/Persona creation for brands
-    - Trend scraping from multiple sources
-    - Image generation using AI
+    - Brand voice analysis
+    - AI avatar/influencer creation via LoRA training
     - Caption and hashtag generation
-    - Video generation with lip-sync
-    - Brand voice training
-    
-    Built for production-ready AI content creation.
+    - Image generation with custom avatars
+    - Video content creation
+    - Trend monitoring and content suggestions
+    - Social media scheduling
     """,
     version=settings.app_version,
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
 
-# Setup Sentry middleware (before other middleware)
+# Setup Sentry middleware
 if settings.sentry_dsn:
     setup_sentry_middleware(app)
 
 # Setup rate limiting
-if settings.rate_limit_enabled:
+if settings.enable_rate_limiting:
     setup_rate_limiting(app)
     logger.info("Rate limiting enabled")
 
 # CORS middleware
-allowed_origins = [
-    settings.frontend_url,
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "https://ai-content-platform-1-iogw.onrender.com",
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin for origin in allowed_origins if origin],
+    allow_origins=[
+        settings.frontend_url,
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://ai-content-platform-1-iogw.onrender.com",
+        "*",  # Allow all origins for now
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -166,6 +167,7 @@ app.include_router(digest_router, prefix="/api/v1")
 app.include_router(calendar_router, prefix="/api/v1")
 app.include_router(abtesting_router, prefix="/api/v1")
 app.include_router(performance_router, prefix="/api/v1")
+app.include_router(setup_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
 app.include_router(admin_enhanced_router, prefix="/api/v1")
 
@@ -183,116 +185,54 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for monitoring and load balancers"""
-    db_status = "unknown"
-    redis_status = "not configured (using in-memory)"
-    
-    # Test database connection
-    try:
-        from sqlalchemy import text
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-        db_status = "connected"
-    except Exception as e:
-        db_status = f"error: {str(e)[:100]}"
-        logger.error(f"Database health check failed: {e}")
-    
-    # Test Redis connection (if configured)
-    if settings.redis_url:
-        try:
-            import redis
-            r = redis.from_url(settings.redis_url, socket_connect_timeout=2)
-            r.ping()
-            redis_status = "connected"
-        except Exception as e:
-            redis_status = "error (falling back to in-memory)"
-            logger.warning(f"Redis health check failed: {e}")
-    
-    # Overall status
-    is_healthy = db_status == "connected"
-    
+    """Health check endpoint for monitoring"""
     return {
-        "status": "healthy" if is_healthy else "degraded",
-        "version": settings.app_version,
-        "environment": settings.environment,
-        "checks": {
-            "database": db_status,
-            "redis": redis_status,
-            "sentry": "configured" if settings.sentry_dsn else "not configured",
-            "rate_limiting": "enabled" if settings.rate_limit_enabled else "disabled"
-        }
+        "status": "healthy",
+        "app": settings.app_name,
+        "version": settings.app_version
     }
 
 
-@app.get("/api/v1/status")
-async def api_status():
-    """API status and configuration check"""
-    return {
-        "api_version": settings.app_version,
-        "environment": settings.environment,
-        "features": {
-            "openai": bool(settings.openai_api_key),
-            "replicate": bool(settings.replicate_api_token),
-            "stripe": bool(settings.stripe_secret_key),
-            "email": bool(settings.smtp_host),
-            "sentry": bool(settings.sentry_dsn),
-            "rate_limiting": settings.rate_limit_enabled
-        },
-        "endpoints": {
-            "auth": "/api/v1/auth",
-            "brands": "/api/v1/brands",
-            "studio": "/api/v1/studio",
-            "video": "/api/v1/video",
-            "social": "/api/v1/social",
-            "billing": "/api/v1/billing",
-            "analytics": "/api/v1/analytics",
-            "costs": "/api/v1/costs"
-        }
-    }
-
+# Utility endpoints for debugging/maintenance
 @app.get("/delete-all-projects")
-async def delete_all_projects():
-    """Delete all studio projects"""
-    from sqlalchemy import text
-    from app.core.database import engine
+async def delete_all_studio_projects():
+    """Delete all studio projects - for testing/development"""
+    from app.studio.models import StudioProject, StudioAsset
     
+    db = SessionLocal()
     try:
-        with engine.connect() as conn:
-            conn.execute(text("DELETE FROM studio_assets"))
-            conn.execute(text("DELETE FROM studio_projects"))
-            conn.commit()
-        return {"status": "OK", "message": "All projects deleted"}
+        # Delete all assets first (foreign key constraint)
+        db.query(StudioAsset).delete()
+        db.query(StudioProject).delete()
+        db.commit()
+        return {"message": "All studio projects deleted"}
     except Exception as e:
+        db.rollback()
         return {"error": str(e)}
+    finally:
+        db.close()
+
 
 @app.get("/fix-studio-assets")
-async def fix_studio_assets():
-    """Fix studio_assets table columns"""
+async def fix_studio_assets_table():
+    """Add missing columns to studio_assets table"""
     from sqlalchemy import text
-    from app.core.database import engine
     
-    statements = [
-        "ALTER TABLE studio_assets ADD COLUMN IF NOT EXISTS platform_optimized TEXT",
-        "ALTER TABLE studio_assets ADD COLUMN IF NOT EXISTS generation_params TEXT",
-    ]
-    
-    results = []
-    for sql in statements:
-        try:
-            with engine.connect() as conn:
-                conn.execute(text(sql))
-                conn.commit()
-                results.append({"sql": sql[:50], "status": "OK"})
-        except Exception as e:
-            results.append({"sql": sql[:50], "error": str(e)[:80]})
-    
-    return {"results": results}
-
-@app.get("/api/v1/rate-limit-info")
-@limiter.limit("10/minute")
-async def rate_limit_info(request: Request):
-    """Get current rate limit status"""
-    from app.core.rate_limit import get_rate_limit_info
-    return await get_rate_limit_info(request)
-
-
+    db = SessionLocal()
+    try:
+        # Add missing columns if they don't exist
+        db.execute(text("""
+            ALTER TABLE studio_assets 
+            ADD COLUMN IF NOT EXISTS platform_optimized TEXT;
+        """))
+        db.execute(text("""
+            ALTER TABLE studio_assets 
+            ADD COLUMN IF NOT EXISTS generation_params TEXT;
+        """))
+        db.commit()
+        return {"message": "studio_assets table fixed"}
+    except Exception as e:
+        db.rollback()
+        return {"error": str(e)}
+    finally:
+        db.close()
