@@ -63,7 +63,10 @@ export default function Trends() {
   const handleSeedCategories = async () => {
     setSeeding(true);
     try {
-      const res = await fetch('/api/v1/setup/seed-categories', { method: 'POST' });
+      const res = await fetch('/api/v1/setup/seed-categories', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
       const data = await res.json();
       toast.success(`Created ${data.created?.length || 0} categories!`);
       fetchData();
@@ -338,7 +341,7 @@ export default function Trends() {
                   {/* Meta */}
                   <div className="flex flex-wrap items-center gap-3">
                     <Badge variant={getSourceBadgeVariant(trend.source)}>
-                      {trend.source.replace('_', ' ')}
+                      {trend.source?.replace('_', ' ')}
                     </Badge>
 
                     {categories.find(c => c.id === trend.category_id) && (
