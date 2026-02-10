@@ -98,7 +98,7 @@ if settings.sentry_dsn:
     setup_sentry_middleware(app)
 
 # Setup rate limiting
-if settings.enable_rate_limiting:
+if settings.rate_limit_enabled:
     setup_rate_limiting(app)
     logger.info("Rate limiting enabled")
 
