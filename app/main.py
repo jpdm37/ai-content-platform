@@ -250,37 +250,20 @@ async def api_status():
         }
     }
 
-@app.get("/fix-generated-content")
-async def fix_generated_content():
-    """Fix generated_content table"""
+@app.get("/delete-all-projects")
+async def delete_all_projects():
+    """Delete all studio projects"""
     from sqlalchemy import text
     from app.core.database import engine
     
-    statements = [
-        "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS content_type VARCHAR(50)",
-        "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'pending'",
-        "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS prompt_used TEXT",
-        "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS negative_prompt TEXT",
-        "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS result_url TEXT",
-        "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS caption TEXT",
-        "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS hashtags TEXT",
-        "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS generation_params TEXT",
-        "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS error_message TEXT",
-        "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
-        "ALTER TABLE generated_content ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP",
-    ]
-    
-    results = []
-    for sql in statements:
-        try:
-            with engine.connect() as conn:
-                conn.execute(text(sql))
-                conn.commit()
-                results.append({"sql": sql[:50], "status": "OK"})
-        except Exception as e:
-            results.append({"sql": sql[:50], "error": str(e)[:80]})
-    
-    return {"results": results}
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("DELETE FROM studio_assets"))
+            conn.execute(text("DELETE FROM studio_projects"))
+            conn.commit()
+        return {"status": "OK", "message": "All projects deleted"}
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/api/v1/rate-limit-info")
 @limiter.limit("10/minute")
