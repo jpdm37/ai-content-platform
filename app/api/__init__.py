@@ -19,6 +19,7 @@ from app.api.digest import router as digest_router
 from app.api.calendar import router as calendar_router
 from app.api.abtesting import router as abtesting_router
 from app.api.performance import router as performance_router
+from app.api.setup import router as setup_router
 
 __all__ = [
     "auth_router",
@@ -41,5 +42,6 @@ __all__ = [
     "digest_router",
     "calendar_router",
     "abtesting_router",
-    "performance_router"
+    "performance_router",
+    "setup_router"
 ]
