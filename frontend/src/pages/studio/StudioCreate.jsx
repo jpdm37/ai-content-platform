@@ -1,43 +1,54 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Sparkles, Twitter, Instagram, Linkedin, Facebook, Video, Image, MessageSquare, Hash, Zap, ArrowRight } from 'lucide-react';
-import { studioApi, brandsApi, loraApi } from '../../services/api';
-import { Card, LoadingState, Spinner } from '../../components/ui';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { 
+  Sparkles, Twitter, Instagram, Linkedin, Facebook, Video, Image, 
+  MessageSquare, Hash, Zap, ArrowRight, TrendingUp, Building2,
+  ChevronRight, Info, AlertCircle
+} from 'lucide-react';
+import { studioApi, brandsApi, loraApi, trendsApi } from '../../services/api';
+import { Card, LoadingState, Spinner, Badge } from '../../components/ui';
 import toast from 'react-hot-toast';
 
 const platforms = [
-  { id: 'twitter', name: 'Twitter/X', icon: Twitter },
   { id: 'instagram', name: 'Instagram', icon: Instagram },
+  { id: 'twitter', name: 'Twitter/X', icon: Twitter },
   { id: 'linkedin', name: 'LinkedIn', icon: Linkedin },
   { id: 'facebook', name: 'Facebook', icon: Facebook },
 ];
 
 const contentTypes = [
-  { id: 'caption', name: 'Captions', icon: MessageSquare, description: 'Multiple variations' },
-  { id: 'hashtags', name: 'Hashtags', icon: Hash, description: 'Platform optimized' },
-  { id: 'hook', name: 'Hooks', icon: Zap, description: 'Attention grabbers' },
-  { id: 'cta', name: 'CTAs', icon: ArrowRight, description: 'Call to actions' },
-  { id: 'image', name: 'Images', icon: Image, description: 'AI generated' },
+  { id: 'caption', name: 'Captions', icon: MessageSquare, description: 'Multiple caption variations', default: true },
+  { id: 'hashtags', name: 'Hashtags', icon: Hash, description: 'Optimized hashtag sets', default: true },
+  { id: 'hook', name: 'Hooks', icon: Zap, description: 'Attention-grabbing openers' },
+  { id: 'cta', name: 'CTAs', icon: ArrowRight, description: 'Call to action phrases' },
+  { id: 'image', name: 'Images', icon: Image, description: 'AI-generated visuals', default: true },
 ];
 
 const tones = [
-  { id: 'professional', name: 'Professional', emoji: '💼' },
-  { id: 'casual', name: 'Casual', emoji: '😊' },
-  { id: 'humorous', name: 'Humorous', emoji: '😄' },
-  { id: 'inspirational', name: 'Inspirational', emoji: '✨' },
-  { id: 'educational', name: 'Educational', emoji: '📚' },
-  { id: 'urgent', name: 'Urgent', emoji: '🚨' },
+  { id: 'professional', name: 'Professional', emoji: '💼', description: 'Business-appropriate' },
+  { id: 'casual', name: 'Casual', emoji: '😊', description: 'Friendly and relaxed' },
+  { id: 'humorous', name: 'Humorous', emoji: '😄', description: 'Fun and witty' },
+  { id: 'inspirational', name: 'Inspirational', emoji: '✨', description: 'Motivating and uplifting' },
+  { id: 'educational', name: 'Educational', emoji: '📚', description: 'Informative and helpful' },
+  { id: 'urgent', name: 'Urgent', emoji: '🚨', description: 'Time-sensitive, action-focused' },
 ];
 
 export default function StudioCreate() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [brands, setBrands] = useState([]);
   const [loraModels, setLoraModels] = useState([]);
+  const [suggestedTrends, setSuggestedTrends] = useState([]);
+  const [showTrendSuggestions, setShowTrendSuggestions] = useState(false);
+
+  // Get trend from URL params
+  const trendFromUrl = searchParams.get('trend');
+  const trendId = searchParams.get('trend_id');
 
   const [formData, setFormData] = useState({
-    brief: '',
+    brief: trendFromUrl || '',
     name: '',
     target_platforms: ['instagram'],
     content_types: ['caption', 'hashtags', 'image'],
@@ -49,18 +60,60 @@ export default function StudioCreate() {
     video_duration: '30s'
   });
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { 
+    fetchData(); 
+  }, []);
+
+  // Auto-generate name from brief
+  useEffect(() => {
+    if (formData.brief && !formData.name) {
+      const autoName = formData.brief.slice(0, 50).split(' ').slice(0, 5).join(' ');
+      setFormData(prev => ({ ...prev, name: autoName }));
+    }
+  }, [formData.brief]);
 
   const fetchData = async () => {
     try {
-      const [brandsRes, loraRes] = await Promise.all([
+      const [brandsRes, loraRes, trendsRes] = await Promise.all([
         brandsApi.list(),
-        loraApi.listModels()
+        loraApi.listModels(),
+        trendsApi.getTop({ limit: 5 }).catch(() => ({ data: [] })),
       ]);
-      setBrands(brandsRes.data);
-      setLoraModels(loraRes.data.filter(m => m.status === 'completed'));
-    } catch (err) { console.error(err); }
+      
+      const brandsList = brandsRes.data || [];
+      const completedModels = (loraRes.data || []).filter(m => m.status === 'completed');
+      
+      setBrands(brandsList);
+      setLoraModels(completedModels);
+      setSuggestedTrends(trendsRes.data || []);
+      
+      // Auto-select first brand if available
+      if (brandsList.length > 0 && !formData.brand_id) {
+        const firstBrandId = brandsList[0].id;
+        setFormData(prev => ({ ...prev, brand_id: firstBrandId.toString() }));
+        
+        // Auto-select matching LoRA model for this brand
+        const matchingModel = completedModels.find(m => m.brand_id === firstBrandId);
+        if (matchingModel) {
+          setFormData(prev => ({ ...prev, lora_model_id: matchingModel.id.toString() }));
+        }
+      }
+    } catch (err) { 
+      console.error(err); 
+    }
     setLoading(false);
+  };
+
+  // When brand changes, auto-select matching LoRA model
+  const handleBrandChange = (brandId) => {
+    setFormData(prev => ({ ...prev, brand_id: brandId }));
+    
+    const matchingModel = loraModels.find(m => m.brand_id === parseInt(brandId));
+    if (matchingModel) {
+      setFormData(prev => ({ ...prev, lora_model_id: matchingModel.id.toString() }));
+    } else {
+      setFormData(prev => ({ ...prev, lora_model_id: '' }));
+    }
   };
 
   const togglePlatform = (id) => {
@@ -81,9 +134,18 @@ export default function StudioCreate() {
     }));
   };
 
+  const useTrendAsBrief = (trend) => {
+    setFormData(prev => ({ 
+      ...prev, 
+      brief: trend.title,
+      name: trend.title.slice(0, 50)
+    }));
+    setShowTrendSuggestions(false);
+  };
+
   const handleSubmit = async () => {
     if (!formData.brief.trim()) {
-      toast.error('Please enter a content brief');
+      toast.error('Please describe what content you want to create');
       return;
     }
     if (formData.target_platforms.length === 0) {
@@ -98,11 +160,18 @@ export default function StudioCreate() {
     setCreating(true);
     try {
       const payload = {
-        ...formData,
-        brand_id: formData.brand_id ? parseInt(formData.brand_id) : undefined,
-        lora_model_id: formData.include_video && formData.lora_model_id ? parseInt(formData.lora_model_id) : undefined,
-        content_types: formData.include_video ? [...formData.content_types, 'video'] : formData.content_types
+        brief: formData.brief,
+        name: formData.name || formData.brief.slice(0, 50),
+        target_platforms: formData.target_platforms,
+        content_types: formData.content_types,
+        tone: formData.tone,
+        num_variations: formData.num_variations,
+        include_video: formData.include_video,
+        video_duration: formData.video_duration,
       };
+
+      if (formData.brand_id) payload.brand_id = parseInt(formData.brand_id);
+      if (formData.lora_model_id) payload.lora_model_id = parseInt(formData.lora_model_id);
 
       const res = await studioApi.createProject(payload);
       toast.success('Project created! Generating content...');
@@ -115,199 +184,297 @@ export default function StudioCreate() {
 
   if (loading) return <LoadingState message="Loading..." />;
 
+  const selectedBrand = brands.find(b => b.id === parseInt(formData.brand_id));
+  const selectedModel = loraModels.find(m => m.id === parseInt(formData.lora_model_id));
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      {/* Header */}
       <div>
-        <h1 className="page-title flex items-center gap-3">
-          <Sparkles className="w-8 h-8 text-accent" />
-          Create Content Project
-        </h1>
-        <p className="text-silver mt-1">Generate a complete content package from one brief</p>
+        <h1 className="page-title">Create Content</h1>
+        <p className="text-silver mt-1">
+          Generate captions, images, hashtags, and more from a single brief
+        </p>
       </div>
 
-      {/* Brief */}
-      <Card className="p-6">
-        <h2 className="section-title mb-4">Content Brief</h2>
-        <div className="space-y-4">
-          <div>
-            <label className="label">Project Name (optional)</label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="e.g., Product Launch Q1"
-              className="input-field"
-            />
+      {/* Trend Banner (if coming from trends) */}
+      {trendFromUrl && (
+        <Card className="p-4 bg-gradient-to-r from-success/10 to-transparent border-success/30">
+          <div className="flex items-center gap-3">
+            <TrendingUp className="w-5 h-5 text-success" />
+            <div className="flex-1">
+              <p className="text-sm text-silver">Creating content about trending topic:</p>
+              <p className="text-pearl font-medium">{trendFromUrl}</p>
+            </div>
+            <Badge variant="success">Trending</Badge>
           </div>
-          <div>
-            <label className="label">What do you want to create content about? *</label>
+        </Card>
+      )}
+
+      {/* Setup Warning */}
+      {brands.length === 0 && (
+        <Card className="p-4 bg-warning/10 border-warning/30">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-warning mt-0.5" />
+            <div>
+              <p className="text-pearl font-medium">Create a brand first</p>
+              <p className="text-silver text-sm mb-2">
+                Brands help maintain consistent voice and style across your content.
+              </p>
+              <button
+                onClick={() => navigate('/brands/new')}
+                className="text-sm text-accent hover:underline"
+              >
+                Create your first brand →
+              </button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Main Form */}
+      <Card className="p-6 space-y-6">
+        {/* Brief Input */}
+        <div>
+          <label className="block text-pearl font-medium mb-2">
+            What do you want to create content about? *
+          </label>
+          <div className="relative">
             <textarea
               value={formData.brief}
               onChange={(e) => setFormData({ ...formData, brief: e.target.value })}
-              placeholder="Describe your content idea, product launch, announcement, or topic. The more detail you provide, the better the results..."
-              className="input-field min-h-[120px]"
-              maxLength={2000}
+              placeholder="e.g., Our new summer collection featuring sustainable fabrics..."
+              rows={3}
+              className="input-field w-full resize-none"
             />
-            <p className="text-xs text-silver mt-1">{formData.brief.length}/2000</p>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Brand (optional)</label>
-              <select
-                value={formData.brand_id}
-                onChange={(e) => setFormData({ ...formData, brand_id: e.target.value })}
-                className="input-field"
-              >
-                <option value="">No brand</option>
-                {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Variations per platform</label>
-              <select
-                value={formData.num_variations}
-                onChange={(e) => setFormData({ ...formData, num_variations: parseInt(e.target.value) })}
-                className="input-field"
-              >
-                {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n} variations</option>)}
-              </select>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* Platforms */}
-      <Card className="p-6">
-        <h2 className="section-title mb-4">Target Platforms *</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {platforms.map(platform => {
-            const selected = formData.target_platforms.includes(platform.id);
-            return (
+            {!formData.brief && suggestedTrends.length > 0 && (
               <button
-                key={platform.id}
-                onClick={() => togglePlatform(platform.id)}
-                className={`p-4 rounded-xl border-2 transition-all text-center ${
-                  selected ? 'border-accent bg-accent/10' : 'border-graphite hover:border-silver'
-                }`}
+                onClick={() => setShowTrendSuggestions(!showTrendSuggestions)}
+                className="absolute bottom-3 right-3 text-xs text-accent hover:underline flex items-center gap-1"
               >
-                <platform.icon className={`w-6 h-6 mx-auto mb-2 ${selected ? 'text-accent' : 'text-silver'}`} />
-                <span className={`text-sm ${selected ? 'text-pearl' : 'text-silver'}`}>{platform.name}</span>
+                <TrendingUp className="w-3 h-3" />
+                Use a trending topic
               </button>
-            );
-          })}
+            )}
+          </div>
+          
+          {/* Trend Suggestions Dropdown */}
+          {showTrendSuggestions && (
+            <div className="mt-2 p-3 bg-slate rounded-lg border border-graphite">
+              <p className="text-xs text-silver mb-2 font-medium">Trending topics:</p>
+              <div className="space-y-2">
+                {suggestedTrends.map(trend => (
+                  <button
+                    key={trend.id}
+                    onClick={() => useTrendAsBrief(trend)}
+                    className="w-full text-left p-2 rounded-lg hover:bg-graphite transition-colors flex items-center gap-2"
+                  >
+                    <span className="text-pearl text-sm flex-1 truncate">{trend.title}</span>
+                    <ChevronRight className="w-4 h-4 text-silver" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      </Card>
 
-      {/* Content Types */}
-      <Card className="p-6">
-        <h2 className="section-title mb-4">Content Types *</h2>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          {contentTypes.map(type => {
-            const selected = formData.content_types.includes(type.id);
-            return (
-              <button
-                key={type.id}
-                onClick={() => toggleContentType(type.id)}
-                className={`p-4 rounded-xl border-2 transition-all text-center ${
-                  selected ? 'border-accent bg-accent/10' : 'border-graphite hover:border-silver'
-                }`}
-              >
-                <type.icon className={`w-6 h-6 mx-auto mb-2 ${selected ? 'text-accent' : 'text-silver'}`} />
-                <span className={`text-sm font-medium ${selected ? 'text-pearl' : 'text-silver'}`}>{type.name}</span>
-                <p className="text-xs text-silver mt-1">{type.description}</p>
-              </button>
-            );
-          })}
-        </div>
-      </Card>
-
-      {/* Tone */}
-      <Card className="p-6">
-        <h2 className="section-title mb-4">Content Tone</h2>
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-          {tones.map(tone => (
-            <button
-              key={tone.id}
-              onClick={() => setFormData({ ...formData, tone: tone.id })}
-              className={`p-3 rounded-xl border-2 transition-all text-center ${
-                formData.tone === tone.id ? 'border-accent bg-accent/10' : 'border-graphite hover:border-silver'
-              }`}
+        {/* Brand & Avatar Selection */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-pearl font-medium mb-2">Brand</label>
+            <select
+              value={formData.brand_id}
+              onChange={(e) => handleBrandChange(e.target.value)}
+              className="input-field w-full"
             >
-              <span className="text-2xl">{tone.emoji}</span>
-              <p className={`text-xs mt-1 ${formData.tone === tone.id ? 'text-pearl' : 'text-silver'}`}>{tone.name}</p>
-            </button>
-          ))}
-        </div>
-      </Card>
-
-      {/* Video Option */}
-      <Card className="p-6">
-        <div className="flex items-start gap-4">
-          <div className="flex-1">
-            <h2 className="section-title flex items-center gap-2">
-              <Video className="w-5 h-5" />
-              Include Talking Head Video
-            </h2>
-            <p className="text-silver text-sm mt-1">Generate a video of your AI avatar presenting the content</p>
+              <option value="">No brand (generic content)</option>
+              {brands.map(brand => (
+                <option key={brand.id} value={brand.id}>{brand.name}</option>
+              ))}
+            </select>
+            {selectedBrand && (
+              <p className="text-xs text-silver mt-1">
+                Voice: {selectedBrand.description?.slice(0, 50) || 'No description'}...
+              </p>
+            )}
           </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={formData.include_video}
-              onChange={(e) => setFormData({ ...formData, include_video: e.target.checked })}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-graphite rounded-full peer peer-checked:bg-accent transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
-          </label>
-        </div>
 
-        {formData.include_video && (
-          <div className="mt-4 pt-4 border-t border-graphite grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Avatar Model</label>
-              {loraModels.length === 0 ? (
-                <p className="text-silver text-sm">No trained avatars. <a href="/lora/new" className="text-accent">Train one first</a></p>
-              ) : (
-                <select
-                  value={formData.lora_model_id}
-                  onChange={(e) => setFormData({ ...formData, lora_model_id: e.target.value })}
-                  className="input-field"
-                >
-                  <option value="">Select avatar...</option>
-                  {loraModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
-              )}
-            </div>
-            <div>
-              <label className="label">Video Duration</label>
-              <select
-                value={formData.video_duration}
-                onChange={(e) => setFormData({ ...formData, video_duration: e.target.value })}
-                className="input-field"
+          <div>
+            <label className="block text-pearl font-medium mb-2">
+              AI Avatar
+              <span className="text-silver font-normal text-sm ml-2">(for images)</span>
+            </label>
+            <select
+              value={formData.lora_model_id}
+              onChange={(e) => setFormData({ ...formData, lora_model_id: e.target.value })}
+              className="input-field w-full"
+              disabled={loraModels.length === 0}
+            >
+              <option value="">No avatar (stock images)</option>
+              {loraModels.map(model => (
+                <option key={model.id} value={model.id}>
+                  {model.name} {model.brand_id === parseInt(formData.brand_id) ? '✓' : ''}
+                </option>
+              ))}
+            </select>
+            {loraModels.length === 0 && (
+              <button
+                onClick={() => navigate('/lora/new')}
+                className="text-xs text-accent hover:underline mt-1"
               >
-                <option value="15s">15 seconds</option>
-                <option value="30s">30 seconds</option>
-                <option value="60s">60 seconds</option>
-              </select>
-            </div>
+                Train your first AI avatar →
+              </button>
+            )}
+            {selectedModel && (
+              <p className="text-xs text-success mt-1 flex items-center gap-1">
+                <Sparkles className="w-3 h-3" />
+                Images will feature your AI avatar
+              </p>
+            )}
           </div>
-        )}
+        </div>
+
+        {/* Platforms */}
+        <div>
+          <label className="block text-pearl font-medium mb-2">Target Platforms *</label>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {platforms.map(platform => {
+              const Icon = platform.icon;
+              const selected = formData.target_platforms.includes(platform.id);
+              return (
+                <button
+                  key={platform.id}
+                  type="button"
+                  onClick={() => togglePlatform(platform.id)}
+                  className={`flex items-center gap-2 p-3 rounded-xl border transition-all
+                            ${selected 
+                              ? 'border-accent bg-accent/10 text-accent' 
+                              : 'border-graphite hover:border-silver text-silver hover:text-pearl'
+                            }`}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span className="font-medium">{platform.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Content Types */}
+        <div>
+          <label className="block text-pearl font-medium mb-2">Content to Generate *</label>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {contentTypes.map(type => {
+              const Icon = type.icon;
+              const selected = formData.content_types.includes(type.id);
+              return (
+                <button
+                  key={type.id}
+                  type="button"
+                  onClick={() => toggleContentType(type.id)}
+                  className={`flex flex-col items-start p-3 rounded-xl border transition-all
+                            ${selected 
+                              ? 'border-accent bg-accent/10' 
+                              : 'border-graphite hover:border-silver'
+                            }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <Icon className={`w-4 h-4 ${selected ? 'text-accent' : 'text-silver'}`} />
+                    <span className={`font-medium ${selected ? 'text-accent' : 'text-pearl'}`}>
+                      {type.name}
+                    </span>
+                  </div>
+                  <span className="text-xs text-silver">{type.description}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Tone */}
+        <div>
+          <label className="block text-pearl font-medium mb-2">Tone</label>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {tones.map(tone => {
+              const selected = formData.tone === tone.id;
+              return (
+                <button
+                  key={tone.id}
+                  type="button"
+                  onClick={() => setFormData({ ...formData, tone: tone.id })}
+                  className={`flex items-center gap-2 p-3 rounded-xl border transition-all
+                            ${selected 
+                              ? 'border-accent bg-accent/10' 
+                              : 'border-graphite hover:border-silver'
+                            }`}
+                >
+                  <span className="text-xl">{tone.emoji}</span>
+                  <div className="text-left">
+                    <span className={`font-medium block ${selected ? 'text-accent' : 'text-pearl'}`}>
+                      {tone.name}
+                    </span>
+                    <span className="text-xs text-silver">{tone.description}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Variations */}
+        <div>
+          <label className="block text-pearl font-medium mb-2">
+            Number of Variations
+            <span className="text-silver font-normal text-sm ml-2">(for captions & images)</span>
+          </label>
+          <div className="flex gap-3">
+            {[2, 3, 5].map(num => (
+              <button
+                key={num}
+                type="button"
+                onClick={() => setFormData({ ...formData, num_variations: num })}
+                className={`px-4 py-2 rounded-lg border transition-all
+                          ${formData.num_variations === num
+                            ? 'border-accent bg-accent/10 text-accent'
+                            : 'border-graphite text-silver hover:border-silver hover:text-pearl'
+                          }`}
+              >
+                {num}
+              </button>
+            ))}
+          </div>
+        </div>
       </Card>
 
-      {/* Submit */}
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-silver">
-          Will generate: {formData.content_types.length} content types × {formData.target_platforms.length} platforms × {formData.num_variations} variations
-          {formData.include_video && ' + 1 video'}
+      {/* Summary & Submit */}
+      <Card className="p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h3 className="text-pearl font-medium">Ready to generate?</h3>
+            <p className="text-silver text-sm">
+              {formData.content_types.length} content types × {formData.num_variations} variations
+              {selectedModel && ' with AI avatar'}
+            </p>
+          </div>
+          <button
+            onClick={handleSubmit}
+            disabled={creating || !formData.brief.trim()}
+            className="btn-primary flex items-center gap-2 px-8"
+          >
+            {creating ? (
+              <>
+                <Spinner size="sm" />
+                Creating...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-5 h-5" />
+                Generate Content
+              </>
+            )}
+          </button>
         </div>
-        <button
-          onClick={handleSubmit}
-          disabled={creating}
-          className="btn-primary px-8 py-3 text-lg"
-        >
-          {creating ? <><Spinner size="sm" className="mr-2" />Creating...</> : 'Create Project'}
-        </button>
-      </div>
+      </Card>
     </div>
   );
 }
