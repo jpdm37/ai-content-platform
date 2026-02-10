@@ -186,19 +186,19 @@ class ContentStudioService:
     
     # ==================== Content Generation ====================
     
-    async def _generate_captions(self, project: StudioProject, brand_voice: str) -> float:
-    """Generate multiple caption variations."""
+async def _generate_captions(self, project: StudioProject, brand_voice: str) -> float:
+        """Generate multiple caption variations."""
         cost = 0.0
         tone_desc = TONE_DESCRIPTIONS.get(project.tone, project.tone)
-    
-    # Use gpt-4o-mini for captions - 20x cheaper, quality is sufficient
+        
+        # Use gpt-4o-mini for captions - 20x cheaper, quality is sufficient
         model = "gpt-4o-mini"
-    
-    # Generate captions once (not per platform) - use first platform's spec
+        
+        # Generate captions once (not per platform) - use first platform's spec
         primary_platform = project.target_platforms[0] if project.target_platforms else "instagram"
         platform_spec = PLATFORM_SPECS.get(primary_platform, PLATFORM_SPECS["instagram"])
-    
-    # Optimized prompt - shorter but effective
+        
+        # Optimized prompt - shorter but effective
         prompt = f"""Generate {project.num_variations} unique social media captions.
 
 Topic: {project.brief}
@@ -208,40 +208,39 @@ Max: {platform_spec['max_chars']} chars
 
 Each caption needs: hook, value, CTA. Number them 1-{project.num_variations}."""
 
-    try:
-        response = await self.openai.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1000,
-            temperature=0.8
-        )
-        
-        content = response.choices[0].message.content
-        cost += 0.0006
-        
-        # Parse variations
-        variations = self._parse_numbered_list(content)
-        
-        for i, caption in enumerate(variations[:project.num_variations], 1):
-            asset = StudioAsset(
-                project_id=project.id,
-                content_type="caption",
-                text_content=caption.strip(),
-                platform=primary_platform,
-                variation_number=i,
-                ai_model_used=model,
-                prompt_used=prompt,
-                cost_usd=cost / len(variations)
+        try:
+            response = await self.openai.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=1000,
+                temperature=0.8
             )
-            self.db.add(asset)
-            project.captions_generated += 1
+            
+            content = response.choices[0].message.content
+            cost += 0.0006
+            
+            variations = self._parse_numbered_list(content)
+            
+            for i, caption in enumerate(variations[:project.num_variations], 1):
+                asset = StudioAsset(
+                    project_id=project.id,
+                    content_type="caption",
+                    text_content=caption.strip(),
+                    platform=primary_platform,
+                    variation_number=i,
+                    ai_model_used=model,
+                    prompt_used=prompt,
+                    cost_usd=cost / len(variations)
+                )
+                self.db.add(asset)
+                project.captions_generated += 1
+            
+            self.db.commit()
+            
+        except Exception as e:
+            logger.error(f"Caption generation failed: {e}")
         
-        self.db.commit()
-        
-    except Exception as e:
-        logger.error(f"Caption generation failed: {e}")
-    
-    return cost
+        return cost
     
     async def _generate_hooks(self, project: StudioProject, brand_voice: str) -> float:
         """Generate attention-grabbing hooks."""
