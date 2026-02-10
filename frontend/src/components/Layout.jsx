@@ -37,9 +37,8 @@ const navigation = [
   { name: 'Avatar Training', href: '/lora', icon: Sparkles },
   { name: 'Generate', href: '/generate', icon: Zap },
   { name: 'Videos', href: '/video', icon: Video },
-  { name: 'Content', href: '/content', icon: Images },
   { name: 'Social Accounts', href: '/social/accounts', icon: Share2 },
-  { name: 'Schedule', href: '/social/schedule', icon: Calendar },
+  { name: 'Schedule', href: '/schedule', icon: Calendar },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Usage & Costs', href: '/costs', icon: DollarSign },
   { name: 'Trends', href: '/trends', icon: TrendingUp },
@@ -67,11 +66,11 @@ export default function Layout({ children }) {
       {/* Sidebar */}
       <aside
         className={`fixed top-0 left-0 z-50 h-full w-72 bg-charcoal border-r border-graphite/50 
-                    transform transition-transform duration-300 ease-in-out
+                    transform transition-transform duration-300 ease-in-out flex flex-col
                     lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         {/* Logo */}
-        <div className="h-16 flex items-center justify-between px-6 border-b border-graphite/50">
+        <div className="h-16 flex items-center justify-between px-6 border-b border-graphite/50 flex-shrink-0">
           <Link to="/" className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent to-accent-dark 
                           flex items-center justify-center shadow-glow">
@@ -87,8 +86,8 @@ export default function Layout({ children }) {
           </button>
         </div>
 
-        {/* Navigation */}
-        <nav className="p-4 space-y-1">
+        {/* Navigation - Scrollable */}
+        <nav className="flex-1 overflow-y-auto p-4 space-y-1">
           {navigation.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
@@ -110,11 +109,14 @@ export default function Layout({ children }) {
           })}
         </nav>
 
-        {/* Footer */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-graphite/50 space-y-3">
+        {/* Footer - Fixed at bottom */}
+        <div className="flex-shrink-0 p-4 border-t border-graphite/50 space-y-3">
           <Link
             to="/billing"
-            className="flex items-center gap-3 px-4 py-2 rounded-xl text-silver hover:text-pearl hover:bg-slate transition-colors"
+            className={`flex items-center gap-3 px-4 py-2 rounded-xl transition-colors
+                      ${isActive('/billing') 
+                        ? 'bg-accent/10 text-accent-light border border-accent/20' 
+                        : 'text-silver hover:text-pearl hover:bg-slate'}`}
           >
             <CreditCard className="w-5 h-5" />
             <span className="font-medium">Billing</span>
