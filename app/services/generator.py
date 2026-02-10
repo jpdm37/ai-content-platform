@@ -120,6 +120,15 @@ class ContentGeneratorService:
             content.error_message = str(e)
             self.db.commit()
             raise
+
+    async def generate_image(self, prompt: str, style: str = "balanced") -> dict:
+        """Public method to generate an image."""
+        try:
+            image_url = await self._generate_image(prompt, priority=style)
+            return {"image_url": image_url, "model": "sdxl-lightning"}
+        except Exception as e:
+            logger.error(f"Image generation error: {e}")
+            return {"error": str(e)}
     
     def _build_avatar_prompt(self, brand: Brand) -> str:
         """Build a prompt for avatar generation"""
