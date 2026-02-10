@@ -539,21 +539,40 @@ Return only the script (no stage directions or notes):"""
         """Parse a numbered list from AI response."""
         import re
         
-        # Try to split by numbered patterns (1., 2., etc.)
-        parts = re.split(r'\n\d+[\.\)]\s*', text)
+        # Try to split by markdown headers (### Caption 1, ## 1., etc.)
+        parts = re.split(r'\n#{1,3}\s*(?:Caption\s*)?\d*\.?\s*', text, flags=re.IGNORECASE)
+        items = [p.strip() for p in parts if p.strip() and len(p.strip()) > 20]
         
-        # Filter out empty parts
-        items = [p.strip() for p in parts if p.strip()]
+        if len(items) >= 2:
+            return items
         
-        # If that didn't work well, try splitting by double newlines
-        if len(items) <= 1:
-            items = [p.strip() for p in text.split('\n\n') if p.strip()]
+        # Try to split by numbered patterns (1., 2., 1), etc.)
+        parts = re.split(r'\n\s*\d+[\.\)]\s*', text)
+        items = [p.strip() for p in parts if p.strip() and len(p.strip()) > 20]
+        
+        if len(items) >= 2:
+            return items
+        
+        # Try splitting by **1.** or **Caption 1** patterns
+        parts = re.split(r'\n\s*\*\*(?:Caption\s*)?\d+[\.\)\*]*\*?\s*', text, flags=re.IGNORECASE)
+        items = [p.strip() for p in parts if p.strip() and len(p.strip()) > 20]
+        
+        if len(items) >= 2:
+            return items
+        
+        # Try splitting by double newlines
+        items = [p.strip() for p in text.split('\n\n') if p.strip() and len(p.strip()) > 20]
+        
+        if len(items) >= 2:
+            return items
         
         # Last resort: split by single newlines
-        if len(items) <= 1:
-            items = [p.strip() for p in text.split('\n') if p.strip() and len(p.strip()) > 20]
+        items = [p.strip() for p in text.split('\n') if p.strip() and len(p.strip()) > 50]
         
-        return items
+        return items if items else [text.strip()]
+```
+
+---
     
     # ==================== Project Retrieval ====================
     
