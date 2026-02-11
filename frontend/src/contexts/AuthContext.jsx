@@ -1,193 +1,157 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import { createContext, useContext, useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const AuthContext = createContext(null);
-
-const TOKEN_KEY = 'auth_tokens';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [onboardingComplete, setOnboardingComplete] = useState(true);
   const navigate = useNavigate();
-
-  const getStoredTokens = () => {
-    try {
-      const tokens = localStorage.getItem(TOKEN_KEY);
-      return tokens ? JSON.parse(tokens) : null;
-    } catch {
-      return null;
-    }
-  };
-
-  const storeTokens = (tokens) => {
-    localStorage.setItem(TOKEN_KEY, JSON.stringify(tokens));
-  };
-
-  const clearTokens = () => {
-    localStorage.removeItem(TOKEN_KEY);
-  };
-
-  const setAuthHeader = (token) => {
-    if (token) {
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    } else {
-      delete api.defaults.headers.common['Authorization'];
-    }
-  };
-
-  const fetchUser = useCallback(async () => {
-    try {
-      const response = await api.get('/auth/me');
-      setUser(response.data);
-      return response.data;
-    } catch (error) {
-      setUser(null);
-      clearTokens();
-      setAuthHeader(null);
-      return null;
-    }
-  }, []);
-
-  const refreshToken = useCallback(async () => {
-    const tokens = getStoredTokens();
-    if (!tokens?.refresh_token) return false;
-
-    try {
-      const response = await api.post('/auth/refresh', {
-        refresh_token: tokens.refresh_token
-      });
-      storeTokens(response.data);
-      setAuthHeader(response.data.access_token);
-      return true;
-    } catch (error) {
-      clearTokens();
-      setAuthHeader(null);
-      setUser(null);
-      return false;
-    }
-  }, []);
+  const location = useLocation();
 
   useEffect(() => {
-    const initAuth = async () => {
-      const tokens = getStoredTokens();
-      if (tokens?.access_token) {
-        setAuthHeader(tokens.access_token);
-        try {
-          await fetchUser();
-        } catch (error) {
-          const refreshed = await refreshToken();
-          if (refreshed) await fetchUser();
+    checkAuth();
+  }, []);
+
+  const checkAuth = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/v1/auth/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        const userData = await res.json();
+        setUser(userData);
+        
+        // Check onboarding status
+        await checkOnboardingStatus(token);
+      } else {
+        localStorage.removeItem('token');
+      }
+    } catch (err) {
+      console.error('Auth check failed:', err);
+      localStorage.removeItem('token');
+    }
+    
+    setLoading(false);
+  };
+
+  const checkOnboardingStatus = async (token) => {
+    try {
+      const res = await fetch('/api/v1/onboarding/status', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (res.ok) {
+        const status = await res.json();
+        setOnboardingComplete(status.is_complete);
+        
+        // Redirect to onboarding if not complete and not already there
+        if (!status.is_complete && 
+            !location.pathname.startsWith('/onboarding') &&
+            !location.pathname.startsWith('/auth')) {
+          navigate('/onboarding');
         }
       }
-      setLoading(false);
-    };
-    initAuth();
-  }, [fetchUser, refreshToken]);
-
-  const register = async (email, password, fullName) => {
-    const response = await api.post('/auth/register', {
-      email, password, full_name: fullName
-    });
-    return response.data;
+    } catch (err) {
+      // If onboarding check fails, assume complete
+      setOnboardingComplete(true);
+    }
   };
 
   const login = async (email, password) => {
-    const response = await api.post('/auth/login', { email, password });
-    storeTokens(response.data);
-    setAuthHeader(response.data.access_token);
-    await fetchUser();
-    return response.data;
+    const res = await fetch('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.detail || 'Login failed');
+    }
+
+    const data = await res.json();
+    localStorage.setItem('token', data.access_token);
+    setUser(data.user);
+    
+    // Check if new user needs onboarding
+    await checkOnboardingStatus(data.access_token);
+    
+    // Navigate based on onboarding status
+    if (!onboardingComplete) {
+      navigate('/onboarding');
+    } else {
+      navigate('/');
+    }
+    
+    return data;
   };
 
-  const logout = async () => {
-    const tokens = getStoredTokens();
-    if (tokens?.refresh_token) {
-      try {
-        await api.post('/auth/logout', { refresh_token: tokens.refresh_token });
-      } catch (error) {}
+  const register = async (email, password, name) => {
+    const res = await fetch('/api/v1/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, name })
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.detail || 'Registration failed');
     }
-    clearTokens();
-    setAuthHeader(null);
+
+    const data = await res.json();
+    localStorage.setItem('token', data.access_token);
+    setUser(data.user);
+    
+    // New users always go to onboarding
+    setOnboardingComplete(false);
+    navigate('/onboarding');
+    
+    return data;
+  };
+
+  const logout = () => {
+    localStorage.removeItem('token');
     setUser(null);
+    setOnboardingComplete(true);
     navigate('/login');
   };
 
-  const oauthLogin = async (provider, code) => {
-    const response = await api.post(`/auth/oauth/${provider}/callback`, null, {
-      params: { code }
-    });
-    storeTokens(response.data);
-    setAuthHeader(response.data.access_token);
-    await fetchUser();
-    return response.data;
-  };
-
-  const getOAuthUrl = async (provider) => {
-    const response = await api.get(`/auth/oauth/${provider}`);
-    return response.data.auth_url;
-  };
-
-  const sendVerificationEmail = async (email) => {
-    const response = await api.post('/auth/verify-email/send', { email });
-    return response.data;
-  };
-
-  const verifyEmail = async (token) => {
-    const response = await api.post('/auth/verify-email/confirm', { token });
-    if (user) setUser({ ...user, is_verified: true });
-    return response.data;
-  };
-
-  const requestPasswordReset = async (email) => {
-    const response = await api.post('/auth/password-reset/request', { email });
-    return response.data;
-  };
-
-  const confirmPasswordReset = async (token, newPassword) => {
-    const response = await api.post('/auth/password-reset/confirm', {
-      token, new_password: newPassword
-    });
-    return response.data;
-  };
-
-  const updateProfile = async (data) => {
-    const response = await api.put('/auth/me', data);
-    setUser(response.data);
-    return response.data;
-  };
-
-  const updatePassword = async (currentPassword, newPassword) => {
-    const response = await api.put('/auth/me/password', {
-      current_password: currentPassword, new_password: newPassword
-    });
-    return response.data;
-  };
-
-  const updateApiKeys = async (keys) => {
-    const response = await api.put('/auth/me/api-keys', keys);
-    await fetchUser();
-    return response.data;
+  const completeOnboarding = () => {
+    setOnboardingComplete(true);
   };
 
   const value = {
-    user, loading,
-    isAuthenticated: !!user,
-    isVerified: user?.is_verified ?? false,
-    register, login, logout,
-    oauthLogin, getOAuthUrl,
-    sendVerificationEmail, verifyEmail,
-    requestPasswordReset, confirmPasswordReset,
-    updateProfile, updatePassword, updateApiKeys,
-    refreshUser: fetchUser
+    user,
+    loading,
+    onboardingComplete,
+    login,
+    register,
+    logout,
+    completeOnboarding,
+    isAuthenticated: !!user
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within an AuthProvider');
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
   return context;
 }
 
