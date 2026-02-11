@@ -1,3 +1,4 @@
+# app/api/__init__.py
 from app.api.auth import router as auth_router
 from app.api.brands import router as brands_router
 from app.api.categories import router as categories_router
@@ -13,7 +14,7 @@ from app.api.analytics import router as analytics_router
 from app.api.assistant import router as assistant_router
 from app.api.admin import router as admin_router
 from app.api.costs import router as costs_router
-from app.api.onboarding import router as onboarding_router
+# from app.api.onboarding import router as onboarding_router  # TEMPORARILY DISABLED
 from app.api.templates import router as templates_router
 from app.api.digest import router as digest_router
 from app.api.calendar import router as calendar_router
@@ -37,7 +38,7 @@ __all__ = [
     "assistant_router",
     "admin_router",
     "costs_router",
-    "onboarding_router",
+    # "onboarding_router",  # TEMPORARILY DISABLED
     "templates_router",
     "digest_router",
     "calendar_router",
