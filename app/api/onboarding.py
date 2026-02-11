@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 
 from app.core.database import get_db
-from app.core.auth import get_current_user
+from app.models.user import User
+from app.auth.dependencies import get_current_user  # Fixed import path
 
 router = APIRouter(prefix="/onboarding", tags=["Onboarding"])
 
@@ -38,26 +39,34 @@ class OnboardingStatus(BaseModel):
 @router.get("/status", response_model=OnboardingStatus)
 async def get_onboarding_status(
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get current onboarding status for the user.
     Checks what steps have been completed.
     """
-    # Check if user has completed onboarding
-    # This could be stored in user profile or separate table
+    from app.models.models import Brand
     
-    # For now, infer from what exists
-    from app.models.brand import Brand
-    from app.lora.models import LoraModel
-    
+    # Check what exists for this user
     has_brand = db.query(Brand).filter(Brand.user_id == current_user.id).first() is not None
-    has_avatar = db.query(LoraModel).filter(LoraModel.user_id == current_user.id).first() is not None
+    
+    # Check for avatar (LoRA model)
+    has_avatar = False
+    try:
+        from app.lora.models import LoraModel
+        has_avatar = db.query(LoraModel).filter(LoraModel.user_id == current_user.id).first() is not None
+    except Exception:
+        pass
     
     # Check user metadata for onboarding completion
-    is_complete = getattr(current_user, 'onboarding_complete', False)
-    if not is_complete and hasattr(current_user, 'metadata') and current_user.metadata:
+    is_complete = False
+    user_type = None
+    goals = []
+    
+    if hasattr(current_user, 'metadata') and current_user.metadata:
         is_complete = current_user.metadata.get('onboarding_complete', False)
+        user_type = current_user.metadata.get('user_type')
+        goals = current_user.metadata.get('goals', [])
     
     # Infer completion if they have brand + content
     if has_brand:
@@ -73,6 +82,8 @@ async def get_onboarding_status(
         is_complete=is_complete,
         current_step='welcome' if not completed_steps else None,
         completed_steps=completed_steps,
+        user_type=user_type,
+        goals=goals,
         has_brand=has_brand,
         has_avatar=has_avatar,
         has_social=False,  # Would check social_accounts table
@@ -84,12 +95,11 @@ async def get_onboarding_status(
 async def save_onboarding_goals(
     goals: OnboardingGoals,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Save user's goals and type from onboarding step 1.
     """
-    # Store in user metadata
     try:
         if not hasattr(current_user, 'metadata') or current_user.metadata is None:
             current_user.metadata = {}
@@ -108,7 +118,7 @@ async def save_onboarding_goals(
 @router.post("/complete")
 async def complete_onboarding(
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Mark onboarding as complete.
