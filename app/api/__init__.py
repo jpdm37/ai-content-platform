@@ -14,7 +14,7 @@ from app.api.analytics import router as analytics_router
 from app.api.assistant import router as assistant_router
 from app.api.admin import router as admin_router
 from app.api.costs import router as costs_router
-# from app.api.onboarding import router as onboarding_router  # TEMPORARILY DISABLED
+from app.api.onboarding import router as onboarding_router
 from app.api.templates import router as templates_router
 from app.api.digest import router as digest_router
 from app.api.calendar import router as calendar_router
