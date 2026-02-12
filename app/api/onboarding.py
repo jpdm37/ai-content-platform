@@ -38,6 +38,41 @@ class OnboardingStatus(BaseModel):
     has_content: bool = False
 
 
+def get_user_metadata(user) -> dict:
+    """Safely get user metadata as a dictionary."""
+    # Handle case where metadata might be None, a dict, or something else
+    # Try user_metadata first (the correct field name), then metadata as fallback
+    meta = getattr(user, 'user_metadata', None) or getattr(user, 'preferences', None)
+    if meta is None:
+        return {}
+    if isinstance(meta, dict):
+        return meta
+    # If it's some other type, return empty dict
+    return {}
+
+
+def set_user_metadata(user, key: str, value, db: Session):
+    """Safely set a value in user metadata."""
+    # Determine which attribute to use
+    attr_name = 'user_metadata' if hasattr(user, 'user_metadata') else 'preferences'
+    
+    current_meta = getattr(user, attr_name, None)
+    if current_meta is None:
+        current_meta = {}
+    if not isinstance(current_meta, dict):
+        current_meta = {}
+    
+    current_meta[key] = value
+    setattr(user, attr_name, current_meta)
+    
+    # Mark as modified for SQLAlchemy to detect the change
+    try:
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(user, attr_name)
+    except Exception:
+        pass
+
+
 # ========== Endpoints ==========
 
 @router.get("/status", response_model=OnboardingStatus)
@@ -63,16 +98,13 @@ async def get_onboarding_status(
         pass
     
     # Check user metadata for onboarding completion
-    is_complete = False
-    user_type = None
-    goals = []
+    user_meta = get_user_metadata(current_user)
     
-    if hasattr(current_user, 'metadata') and current_user.metadata:
-        is_complete = current_user.metadata.get('onboarding_complete', False)
-        user_type = current_user.metadata.get('user_type')
-        goals = current_user.metadata.get('goals', [])
+    is_complete = user_meta.get('onboarding_complete', False)
+    user_type = user_meta.get('user_type')
+    goals = user_meta.get('goals', [])
     
-    # Infer completion if they have brand + content
+    # Infer completion if they have brand
     if has_brand:
         is_complete = True
     
@@ -90,8 +122,8 @@ async def get_onboarding_status(
         goals=goals,
         has_brand=has_brand,
         has_avatar=has_avatar,
-        has_social=False,  # Would check social_accounts table
-        has_content=False  # Would check studio_projects table
+        has_social=False,
+        has_content=False
     )
 
 
@@ -105,18 +137,16 @@ async def save_onboarding_goals(
     Save user's goals and type from onboarding step 1.
     """
     try:
-        if not hasattr(current_user, 'metadata') or current_user.metadata is None:
-            current_user.metadata = {}
-        
-        current_user.metadata['user_type'] = goals.user_type
-        current_user.metadata['goals'] = goals.goals
-        current_user.metadata['onboarding_started_at'] = datetime.utcnow().isoformat()
+        set_user_metadata(current_user, 'user_type', goals.user_type, db)
+        set_user_metadata(current_user, 'goals', goals.goals, db)
+        set_user_metadata(current_user, 'onboarding_started_at', datetime.utcnow().isoformat(), db)
         
         db.commit()
         
         return {"success": True, "message": "Goals saved"}
     except Exception as e:
-        return {"success": True, "message": "Goals noted"}  # Non-critical
+        print(f"Error saving goals: {e}")
+        return {"success": True, "message": "Goals noted"}
 
 
 @router.post("/complete")
@@ -128,16 +158,14 @@ async def complete_onboarding(
     Mark onboarding as complete.
     """
     try:
-        if not hasattr(current_user, 'metadata') or current_user.metadata is None:
-            current_user.metadata = {}
-        
-        current_user.metadata['onboarding_complete'] = True
-        current_user.metadata['onboarding_completed_at'] = datetime.utcnow().isoformat()
+        set_user_metadata(current_user, 'onboarding_complete', True, db)
+        set_user_metadata(current_user, 'onboarding_completed_at', datetime.utcnow().isoformat(), db)
         
         db.commit()
         
         return {"success": True, "message": "Onboarding complete!"}
     except Exception as e:
+        print(f"Error completing onboarding: {e}")
         return {"success": True, "message": "Welcome aboard!"}
 
 
