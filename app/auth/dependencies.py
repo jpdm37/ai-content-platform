@@ -87,12 +87,16 @@ async def get_current_verified_user(
 ) -> User:
     """
     Get the current user, ensuring they have verified their email.
+    
+    NOTE: Email verification is currently DISABLED for development.
+    TODO: Re-enable this check before production launch.
     """
-    if not current_user.is_verified:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Email not verified. Please verify your email to continue."
-        )
+    # TEMPORARILY DISABLED - Allow unverified users for development
+    # if not current_user.is_verified:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Email not verified. Please verify your email to continue."
+    #     )
     return current_user
 
 
