@@ -1,5 +1,7 @@
 """
 Billing and Subscription Database Models
+
+Updated FREE tier limits to allow basic functionality for testing/demo.
 """
 from datetime import datetime
 from sqlalchemy import (
@@ -38,19 +40,27 @@ class PaymentStatus(enum.Enum):
 
 
 # Plan limits configuration
+# Updated FREE tier to allow basic testing/demo functionality
 PLAN_LIMITS = {
     SubscriptionTier.FREE: {
         "name": "Free",
         "price_monthly": 0,
-        "generations_per_month": 10,
-        "brands": 1,
-        "lora_models": 0,
-        "scheduled_posts": 0,
-        "social_accounts": 0,
+        "generations_per_month": 50,     # Increased from 10
+        "brands": 2,                      # Increased from 1
+        "lora_models": 1,                 # Increased from 0 - allow 1 avatar
+        "scheduled_posts": 10,            # Increased from 0
+        "social_accounts": 2,             # Increased from 0 - allow 2 accounts
         "team_members": 1,
         "api_access": False,
         "priority_support": False,
-        "features": ["Basic generation", "1 brand", "Community support"]
+        "features": [
+            "50 generations/month",
+            "2 brands",
+            "1 AI avatar",
+            "2 social accounts",
+            "10 scheduled posts",
+            "Community support"
+        ]
     },
     SubscriptionTier.CREATOR: {
         "name": "Creator",
@@ -205,8 +215,8 @@ class UsageRecord(Base):
     # Cost tracking
     cost_credits = Column(Integer, default=1)  # Internal credit cost
     
-    # Extra data (renamed from 'metadata' - reserved word in SQLAlchemy)
-    usage_metadata = Column(JSON, nullable=True)
+    # Metadata
+    metadata = Column(JSON, nullable=True)
     
     # Timestamp
     created_at = Column(DateTime, default=datetime.utcnow)
