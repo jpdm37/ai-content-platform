@@ -14,10 +14,12 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.models.user import User
-from app.auth.dependencies import get_current_user  # Fixed import path
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/onboarding", tags=["Onboarding"])
 
+
+# ========== Schemas ==========
 
 class OnboardingGoals(BaseModel):
     user_type: str  # creator, business, agency
@@ -35,6 +37,8 @@ class OnboardingStatus(BaseModel):
     has_social: bool = False
     has_content: bool = False
 
+
+# ========== Endpoints ==========
 
 @router.get("/status", response_model=OnboardingStatus)
 async def get_onboarding_status(
