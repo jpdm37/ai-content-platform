@@ -38,7 +38,7 @@ __all__ = [
     "assistant_router",
     "admin_router",
     "costs_router",
-    # "onboarding_router",  # TEMPORARILY DISABLED
+    "onboarding_router",
     "templates_router",
     "digest_router",
     "calendar_router",
