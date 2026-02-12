@@ -3,6 +3,9 @@ import { useNavigate, useLocation } from 'react-router-dom';
 
 const AuthContext = createContext(null);
 
+// Get API URL from environment or use default
+const API_URL = import.meta.env.VITE_API_URL || '/api/v1';
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -22,7 +25,7 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      const res = await fetch('/api/v1/auth/me', {
+      const res = await fetch(`${API_URL}/auth/me`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -45,7 +48,7 @@ export function AuthProvider({ children }) {
 
   const checkOnboardingStatus = async (token) => {
     try {
-      const res = await fetch('/api/v1/onboarding/status', {
+      const res = await fetch(`${API_URL}/onboarding/status`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -67,7 +70,7 @@ export function AuthProvider({ children }) {
   };
 
   const login = async (email, password) => {
-    const res = await fetch('/api/v1/auth/login', {
+    const res = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
@@ -84,7 +87,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('token', data.access_token);
     
     // Fetch user data since login response doesn't include it
-    const userRes = await fetch('/api/v1/auth/me', {
+    const userRes = await fetch(`${API_URL}/auth/me`, {
       headers: { 'Authorization': `Bearer ${data.access_token}` }
     });
     
@@ -96,23 +99,25 @@ export function AuthProvider({ children }) {
     const userData = await userRes.json();
     setUser(userData);
     
-    // Check if user needs onboarding
-    await checkOnboardingStatus(data.access_token);
-    
-    // Navigate based on onboarding status
-    // Note: onboardingComplete state might not be updated yet, so check again
-    const onboardingRes = await fetch('/api/v1/onboarding/status', {
-      headers: { 'Authorization': `Bearer ${data.access_token}` }
-    });
-    
-    if (onboardingRes.ok) {
-      const status = await onboardingRes.json();
-      if (!status.is_complete) {
-        navigate('/onboarding');
+    // Check onboarding status and navigate
+    try {
+      const onboardingRes = await fetch(`${API_URL}/onboarding/status`, {
+        headers: { 'Authorization': `Bearer ${data.access_token}` }
+      });
+      
+      if (onboardingRes.ok) {
+        const status = await onboardingRes.json();
+        setOnboardingComplete(status.is_complete);
+        
+        if (!status.is_complete) {
+          navigate('/onboarding');
+        } else {
+          navigate('/');
+        }
       } else {
         navigate('/');
       }
-    } else {
+    } catch (err) {
       // If onboarding check fails, go to dashboard
       navigate('/');
     }
@@ -121,13 +126,13 @@ export function AuthProvider({ children }) {
   };
 
   const register = async (email, password, fullName) => {
-    const res = await fetch('/api/v1/auth/register', {
+    const res = await fetch(`${API_URL}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         email, 
         password, 
-        full_name: fullName  // Backend expects full_name, not name
+        full_name: fullName
       })
     });
 
@@ -138,24 +143,15 @@ export function AuthProvider({ children }) {
 
     const data = await res.json();
     
-    // Registration returns user data but no token - need to login
-    // Or if it does return a token:
+    // After registration, login to get token
+    // (Registration might not return a token)
     if (data.access_token) {
       localStorage.setItem('token', data.access_token);
-      
-      // Fetch user data
-      const userRes = await fetch('/api/v1/auth/me', {
-        headers: { 'Authorization': `Bearer ${data.access_token}` }
-      });
-      
-      if (userRes.ok) {
-        const userData = await userRes.json();
-        setUser(userData);
-      }
-    } else {
-      // If registration doesn't return token, user is created but needs to login
-      // Or verify email first
       setUser(data);
+    } else {
+      // Need to login after registration
+      await login(email, password);
+      return data;
     }
     
     // New users always go to onboarding
