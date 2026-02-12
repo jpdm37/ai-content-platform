@@ -10,8 +10,12 @@ const api = axios.create({
   },
 });
 
-// Request interceptor for debugging
+// Request interceptor to add auth token
 api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`);
   return config;
 });
@@ -21,6 +25,14 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     console.error('API Error:', error.response?.data || error.message);
+    
+    // If 401 Unauthorized, clear token and redirect to login
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      // Optionally redirect to login
+      // window.location.href = '/login';
+    }
+    
     return Promise.reject(error);
   }
 );
