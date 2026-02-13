@@ -1,7 +1,12 @@
+/**
+ * API Service - Complete with Avatar endpoints for onboarding
+ * 
+ * This file should replace: frontend/src/services/api.js
+ */
 import axios from 'axios';
 
-// Use environment variable or default to relative path for production
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
+// Use environment variable or default to the deployed backend
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://ai-content-platform-kpc2.onrender.com/api/v1';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -10,40 +15,118 @@ const api = axios.create({
   },
 });
 
-// Request interceptor to add auth token
+// Request interceptor for authentication
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`);
   return config;
 });
 
 // Response interceptor for error handling
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    console.error('API Error:', error.response?.data || error.message);
+  async (error) => {
+    const originalRequest = error.config;
     
-    // If 401 Unauthorized, clear token and redirect to login
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      // Optionally redirect to login
-      // window.location.href = '/login';
+    // Handle 401 Unauthorized - try to refresh token
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      const refreshToken = localStorage.getItem('refreshToken');
+      if (refreshToken) {
+        try {
+          const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+            refresh_token: refreshToken
+          });
+          
+          const { access_token, refresh_token: newRefresh } = response.data;
+          localStorage.setItem('token', access_token);
+          localStorage.setItem('refreshToken', newRefresh);
+          
+          originalRequest.headers.Authorization = `Bearer ${access_token}`;
+          return api(originalRequest);
+        } catch (refreshError) {
+          // Refresh failed, redirect to login
+          localStorage.removeItem('token');
+          localStorage.removeItem('refreshToken');
+          window.location.href = '/login';
+          return Promise.reject(refreshError);
+        }
+      }
     }
     
+    console.error('API Error:', error.response?.data || error.message);
     return Promise.reject(error);
   }
 );
 
+// ============ Authentication API ============
+export const authApi = {
+  register: (data) => api.post('/auth/register', data),
+  login: (data) => api.post('/auth/login', data),
+  logout: (data) => api.post('/auth/logout', data),
+  refresh: (data) => api.post('/auth/refresh', data),
+  
+  // Profile
+  getProfile: () => api.get('/auth/me'),
+  updateProfile: (data) => api.put('/auth/me', data),
+  updatePassword: (data) => api.put('/auth/me/password', data),
+  updateApiKeys: (data) => api.put('/auth/me/api-keys', data),
+  
+  // Email verification
+  sendVerification: (data) => api.post('/auth/verify-email/send', data),
+  confirmVerification: (data) => api.post('/auth/verify-email/confirm', data),
+  
+  // Password reset
+  requestReset: (data) => api.post('/auth/password-reset/request', data),
+  confirmReset: (data) => api.post('/auth/password-reset/confirm', data),
+  
+  // OAuth
+  getOAuthProviders: () => api.get('/auth/oauth/providers'),
+  initiateOAuth: (provider) => api.get(`/auth/oauth/${provider}`),
+  handleOAuthCallback: (provider, code) => api.post(`/auth/oauth/${provider}/callback`, null, { params: { code } }),
+  
+  // Status
+  getStatus: () => api.get('/auth/status'),
+};
+
+// ============ Avatar API (for onboarding) ============
+export const avatarApi = {
+  // Generate concepts from description
+  generateConcepts: (config) => api.post('/avatar/generate-concepts', config),
+  
+  // Generate training images from selected concept
+  generateTrainingImages: (data) => api.post('/avatar/generate-training-images', data),
+  
+  // Create LoRA model from generated images
+  createFromGenerated: (data) => api.post('/avatar/create-from-generated', data),
+  
+  // Upload existing images for training
+  uploadImages: (brandId, files) => {
+    const formData = new FormData();
+    files.forEach(file => formData.append('files', file));
+    return api.post(`/avatar/upload-images?brand_id=${brandId}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  
+  // Get avatar training status
+  getStatus: (avatarId) => api.get(`/avatar/status/${avatarId}`),
+  
+  // List all user avatars
+  list: () => api.get('/avatar/list'),
+  
+  // Delete avatar
+  delete: (avatarId) => api.delete(`/avatar/${avatarId}`),
+};
+
 // ============ Brands API ============
 export const brandsApi = {
-  list: () => api.get('/brands/'),
-  getAll: () => api.get('/brands/'),
-  get: (id) => api.get(`/brands/${id}`),
+  getAll: () => api.get('/brands'),
   getById: (id) => api.get(`/brands/${id}`),
-  create: (data) => api.post('/brands/', data),
+  create: (data) => api.post('/brands', data),
   update: (id, data) => api.put(`/brands/${id}`, data),
   delete: (id) => api.delete(`/brands/${id}`),
   getCategories: (id) => api.get(`/brands/${id}/categories`),
@@ -53,32 +136,124 @@ export const brandsApi = {
 
 // ============ Categories API ============
 export const categoriesApi = {
-  getAll: () => api.get('/categories/'),
+  getAll: () => api.get('/categories'),
   getById: (id) => api.get(`/categories/${id}`),
-  create: (data) => api.post('/categories/', data),
+  create: (data) => api.post('/categories', data),
   delete: (id) => api.delete(`/categories/${id}`),
   seed: () => api.post('/categories/seed'),
+  getByName: (name) => api.get(`/categories/by-name/${name}`),
 };
 
 // ============ Trends API ============
 export const trendsApi = {
-  getAll: (params) => api.get('/trends/', { params }),
+  getAll: (params) => api.get('/trends', { params }),
   getTop: (params) => api.get('/trends/top', { params }),
   getRecent: (params) => api.get('/trends/recent', { params }),
   getById: (id) => api.get(`/trends/${id}`),
   getByCategory: (categoryId, limit = 20) => api.get(`/trends/category/${categoryId}`, { params: { limit } }),
   scrape: (data) => api.post('/trends/scrape', data),
+  seed: () => api.post('/trends/seed'),
   cleanupExpired: () => api.delete('/trends/expired'),
 };
 
-// ============ Generation API ============
+// ============ Content Generation API ============
 export const generateApi = {
   avatar: (data) => api.post('/generate/avatar', data),
-  content: (data) => api.post('/generate/content/', data),
-  getAll: (params) => api.get('/generate/content/', { params }),
+  content: (data) => api.post('/generate/content', data),
+  getAll: (params) => api.get('/generate/content', { params }),
   getById: (id) => api.get(`/generate/content/${id}`),
   delete: (id) => api.delete(`/generate/content/${id}`),
   getByBrand: (brandId, limit = 20) => api.get(`/generate/brand/${brandId}/content`, { params: { limit } }),
+};
+
+// ============ Social Accounts API ============
+export const socialApi = {
+  getAll: () => api.get('/social/accounts'),
+  getById: (id) => api.get(`/social/accounts/${id}`),
+  connect: (platform, data) => api.post(`/social/connect/${platform}`, data),
+  disconnect: (id) => api.delete(`/social/accounts/${id}`),
+  getCallback: (platform, code) => api.get(`/social/callback/${platform}`, { params: { code } }),
+  
+  // Posting
+  post: (accountId, data) => api.post(`/social/accounts/${accountId}/post`, data),
+  schedule: (data) => api.post('/social/schedule', data),
+  
+  // Scheduled posts
+  getScheduled: (params) => api.get('/social/scheduled', { params }),
+  cancelScheduled: (id) => api.delete(`/social/scheduled/${id}`),
+};
+
+// ============ LoRA / Avatar Training API ============
+export const loraApi = {
+  // List user's LoRA models
+  list: () => api.get('/lora/models'),
+  getById: (id) => api.get(`/lora/models/${id}`),
+  
+  // Create and train
+  create: (data) => api.post('/lora/models', data),
+  addImages: (modelId, images) => api.post(`/lora/models/${modelId}/images`, images),
+  startTraining: (modelId, config) => api.post(`/lora/models/${modelId}/train`, config),
+  
+  // Training status
+  getProgress: (modelId) => api.get(`/lora/models/${modelId}/progress`),
+  cancelTraining: (modelId) => api.post(`/lora/models/${modelId}/cancel`),
+  
+  // Generation with trained model
+  generate: (modelId, data) => api.post(`/lora/models/${modelId}/generate`, data),
+  getSamples: (modelId) => api.get(`/lora/models/${modelId}/samples`),
+  
+  // Delete
+  delete: (modelId) => api.delete(`/lora/models/${modelId}`),
+};
+
+// ============ Studio / Projects API ============
+export const studioApi = {
+  // Projects
+  getProjects: () => api.get('/studio/projects'),
+  getProject: (id) => api.get(`/studio/projects/${id}`),
+  createProject: (data) => api.post('/studio/projects', data),
+  updateProject: (id, data) => api.put(`/studio/projects/${id}`, data),
+  deleteProject: (id) => api.delete(`/studio/projects/${id}`),
+  
+  // Assets
+  getAssets: (projectId) => api.get(`/studio/projects/${projectId}/assets`),
+  uploadAsset: (projectId, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post(`/studio/projects/${projectId}/assets`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  deleteAsset: (projectId, assetId) => api.delete(`/studio/projects/${projectId}/assets/${assetId}`),
+};
+
+// ============ Billing API ============
+export const billingApi = {
+  // Subscription
+  getSubscription: () => api.get('/billing/subscription'),
+  getPlans: () => api.get('/billing/plans'),
+  createCheckout: (priceId) => api.post('/billing/checkout', { price_id: priceId }),
+  manageSubscription: () => api.post('/billing/portal'),
+  
+  // Usage
+  getUsage: () => api.get('/billing/usage'),
+  getDashboard: () => api.get('/billing/dashboard'),
+  
+  // Limits
+  checkLimit: (type) => api.get(`/billing/check-limit/${type}`),
+};
+
+// ============ Onboarding API ============
+export const onboardingApi = {
+  getStatus: () => api.get('/onboarding/status'),
+  getProgress: () => api.get('/onboarding/progress'),
+  
+  // Steps
+  completeStep: (step, data) => api.post(`/onboarding/step/${step}`, data),
+  skipStep: (step) => api.post(`/onboarding/skip/${step}`),
+  
+  // Complete onboarding
+  complete: () => api.post('/onboarding/complete'),
 };
 
 // ============ Status API ============
@@ -87,259 +262,20 @@ export const statusApi = {
   status: () => api.get('/status'),
 };
 
-// ============ LoRA Training API ============
-export const loraApi = {
-  // Models
-  listModels: (params) => api.get('/lora/models/', { params }),
-  getModel: (id) => api.get(`/lora/models/${id}`),
-  createModel: (data) => api.post('/lora/models/', data),
-  updateModel: (id, data) => api.put(`/lora/models/${id}`, data),
-  deleteModel: (id) => api.delete(`/lora/models/${id}`),
-  
-  // Images
-  addImage: (modelId, data) => api.post(`/lora/models/${modelId}/images`, data),
-  bulkAddImages: (modelId, urls) => api.post(`/lora/models/${modelId}/images/bulk`, urls),
-  listImages: (modelId) => api.get(`/lora/models/${modelId}/images`),
-  deleteImage: (modelId, imageId) => api.delete(`/lora/models/${modelId}/images/${imageId}`),
-  
-  // Training
-  validateModel: (modelId) => api.post(`/lora/models/${modelId}/validate`),
-  startTraining: (modelId, config) => api.post(`/lora/models/${modelId}/train`, config),
-  getProgress: (modelId) => api.get(`/lora/models/${modelId}/progress`),
-  cancelTraining: (modelId) => api.post(`/lora/models/${modelId}/cancel`),
-  
-  // Generation
-  generate: (data) => api.post('/lora/generate', data),
-  generateBatch: (data) => api.post('/lora/generate/batch', data),
-  generateScenario: (data) => api.post('/lora/generate/scenario', data),
-  generateTestSamples: (modelId, num = 4) => api.post(`/lora/models/${modelId}/test-samples`, null, { params: { num_samples: num } }),
-  
-  // Samples
-  listSamples: (modelId, params) => api.get(`/lora/models/${modelId}/samples`, { params }),
-  rateSample: (sampleId, data) => api.post(`/lora/samples/${sampleId}/rate`, data),
-  deleteSample: (sampleId) => api.delete(`/lora/samples/${sampleId}`),
-  
-  // Stats
-  getModelStats: (modelId) => api.get(`/lora/models/${modelId}/stats`),
-  getUserStats: () => api.get('/lora/stats')
-};
-
-// ============ Billing API ============
-export const billingApi = {
-  // Plans
-  listPlans: () => api.get('/billing/plans/'),
-  getPlan: (tier) => api.get(`/billing/plans/${tier}`),
-  
-  // Subscription
-  getSubscription: () => api.get('/billing/subscription'),
-  getUsage: () => api.get('/billing/usage'),
-  checkLimit: (feature) => api.get(`/billing/check-limit/${feature}`),
-  
-  // Checkout
-  createCheckout: (data) => api.post('/billing/checkout', data),
-  createPortal: (data) => api.post('/billing/portal', data),
-  
-  // Plan changes
-  changePlan: (data) => api.post('/billing/change-plan', data),
-  cancelSubscription: (atPeriodEnd = true) => api.post('/billing/cancel', null, { params: { at_period_end: atPeriodEnd } }),
-  reactivate: () => api.post('/billing/reactivate'),
-  
-  // Payments
-  getPayments: (params) => api.get('/billing/payments', { params }),
-  
-  // Coupons
-  validateCoupon: (code, tier) => api.post('/billing/coupon/validate', { code }, { params: { tier } })
-};
-
-// ============ Social Media API ============
-export const socialApi = {
-  // Accounts
-  listAccounts: (params) => api.get('/social/accounts/', { params }),
-  getAccount: (id) => api.get(`/social/accounts/${id}`),
-  getConnectUrl: (platform, brandId) => api.get(`/social/connect/${platform}/url`, { params: { brand_id: brandId } }),
-  connectCallback: (platform, data) => api.post(`/social/connect/${platform}/callback`, data),
-  disconnectAccount: (id) => api.delete(`/social/accounts/${id}`),
-  updateAccountBrand: (id, brandId) => api.put(`/social/accounts/${id}/brand`, null, { params: { brand_id: brandId } }),
-  
-  // Posts
-  createPost: (data) => api.post('/social/posts', data),
-  listPosts: (params) => api.get('/social/posts', { params }),
-  getPost: (id) => api.get(`/social/posts/${id}`),
-  updatePost: (id, data) => api.put(`/social/posts/${id}`, data),
-  deletePost: (id) => api.delete(`/social/posts/${id}`),
-  cancelPost: (id) => api.post(`/social/posts/${id}/cancel`),
-  
-  // Quick post
-  postNow: (data) => api.post('/social/posts/now', data),
-  
-  // Bulk
-  bulkSchedule: (data) => api.post('/social/posts/bulk', data),
-  
-  // Calendar
-  getCalendar: (year, month, params) => api.get('/social/calendar', { params: { year, month, ...params } }),
-  
-  // Best times
-  getBestTimes: (accountId) => api.get(`/social/accounts/${accountId}/best-times`),
-  
-  // Templates
-  createTemplate: (data) => api.post('/social/templates/', data),
-  listTemplates: (params) => api.get('/social/templates/', { params }),
-  deleteTemplate: (id) => api.delete(`/social/templates/${id}`)
-};
-
-// ============ Video Generation API ============
-export const videoApi = {
-  // Generation
-  generate: (data) => api.post('/video/generate', data),
-  generateFromTemplate: (data) => api.post('/video/generate/template', data),
-  generateBatch: (data) => api.post('/video/generate/batch', data),
-  
-  // Videos
-  listVideos: (params) => api.get('/video/videos/', { params }),
-  getVideo: (id) => api.get(`/video/videos/${id}`),
-  getProgress: (id) => api.get(`/video/videos/${id}/progress`),
-  cancelVideo: (id) => api.post(`/video/videos/${id}/cancel`),
-  deleteVideo: (id) => api.delete(`/video/videos/${id}`),
-  
-  // Cost
-  estimateCost: (data) => api.post('/video/estimate-cost', data),
-  
-  // Voices
-  listVoices: () => api.get('/video/voices'),
-  listVoiceClones: () => api.get('/video/voices/clones'),
-  createVoiceClone: (data) => api.post('/video/voices/clone', data),
-  deleteVoiceClone: (id) => api.delete(`/video/voices/clones/${id}`),
-  
-  // Templates
-  listTemplates: (params) => api.get('/video/templates/', { params }),
-  createTemplate: (data) => api.post('/video/templates/', data),
-  deleteTemplate: (id) => api.delete(`/video/templates/${id}`),
-  
-  // Presets
-  listExpressions: () => api.get('/video/expressions'),
-  listAspectRatios: () => api.get('/video/aspect-ratios')
-};
-
-// ============ Content Studio API ============
-export const studioApi = {
-  // Projects
-  createProject: (data) => api.post('/studio/projects/', data),
-  listProjects: (params) => api.get('/studio/projects/', { params }),
-  getProject: (id) => api.get(`/studio/projects/${id}`),
-  getProjectProgress: (id) => api.get(`/studio/projects/${id}/progress`),
-  deleteProject: (id) => api.delete(`/studio/projects/${id}`),
-  
-  // Assets
-  getAssets: (projectId, params) => api.get(`/studio/projects/${projectId}/assets`, { params }),
-  updateAsset: (id, data) => api.patch(`/studio/assets/${id}`, data),
-  selectAsset: (id) => api.post(`/studio/assets/${id}/select`),
-  toggleFavorite: (id) => api.post(`/studio/assets/${id}/favorite`),
-  
-  // Quick generate
-  quickGenerate: (data) => api.post('/studio/quick-generate', data),
-  
-  // Templates
-  listTemplates: (params) => api.get('/studio/templates/', { params }),
-  createTemplate: (data) => api.post('/studio/templates/', data),
-  deleteTemplate: (id) => api.delete(`/studio/templates/${id}`),
-  
-  // Presets
-  getTones: () => api.get('/studio/tones'),
-  getPlatforms: () => api.get('/studio/platforms')
-};
-
-// ============ Brand Voice API ============
-export const brandVoiceApi = {
-  // Voice profile
-  getVoice: (brandId) => api.get(`/voice/brands/${brandId}`),
-  getVoiceStats: (brandId) => api.get(`/voice/brands/${brandId}/stats`),
-  
-  // Examples
-  getExamples: (brandId) => api.get(`/voice/brands/${brandId}/examples`),
-  addExample: (brandId, data) => api.post(`/voice/brands/${brandId}/examples`, data),
-  addExamplesBulk: (brandId, data) => api.post(`/voice/brands/${brandId}/examples/bulk`, data),
-  deleteExample: (brandId, exampleId) => api.delete(`/voice/brands/${brandId}/examples/${exampleId}`),
-  
-  // Training
-  train: (brandId) => api.post(`/voice/brands/${brandId}/train`),
-  
-  // Generation
-  generate: (brandId, data) => api.post(`/voice/brands/${brandId}/generate`, data),
-  generateVariations: (brandId, data) => api.post(`/voice/brands/${brandId}/generate/variations`, data),
-  
-  // Feedback
-  recordFeedback: (data) => api.post('/voice/feedback', data),
-  
-  // Analysis
-  analyzeText: (data) => api.post('/voice/analyze', data)
+// ============ Calendar API ============
+export const calendarApi = {
+  getEvents: (params) => api.get('/calendar/events', { params }),
+  createEvent: (data) => api.post('/calendar/events', data),
+  updateEvent: (id, data) => api.put(`/calendar/events/${id}`, data),
+  deleteEvent: (id) => api.delete(`/calendar/events/${id}`),
 };
 
 // ============ Analytics API ============
 export const analyticsApi = {
-  getOverview: (days) => api.get('/analytics/overview', { params: { days } }),
-  getContent: (days) => api.get('/analytics/content', { params: { days } }),
-  getSocial: (days) => api.get('/analytics/social', { params: { days } }),
-  getVideos: (days) => api.get('/analytics/videos', { params: { days } }),
-  getStudio: (days) => api.get('/analytics/studio', { params: { days } }),
-  getCosts: (days) => api.get('/analytics/costs', { params: { days } }),
-  getBestTimes: () => api.get('/analytics/best-times/'),
-  getDashboard: (days) => api.get('/analytics/dashboard', { params: { days } })
-};
-
-// ============ AI Assistant API ============
-export const assistantApi = {
-  chat: (data) => api.post('/assistant/chat', data),
-  improve: (data) => api.post('/assistant/improve', data),
-  hashtags: (data) => api.post('/assistant/hashtags', data),
-  translate: (data) => api.post('/assistant/translate', data),
-  variations: (data) => api.post('/assistant/variations', data),
-  optimize: (data) => api.post('/assistant/optimize', data),
-  suggestCta: (data) => api.post('/assistant/suggest-cta', data),
-  getCapabilities: () => api.get('/assistant/capabilities/')
-};
-
-// ============ Admin API ============
-const adminInstance = axios.create({
-  baseURL: API_BASE_URL,
-  headers: { 'Content-Type': 'application/json' }
-});
-
-adminInstance.interceptors.request.use((config) => {
-  const token = localStorage.getItem('adminToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-export const adminApi = {
-  // Auth
-  login: (data) => adminInstance.post('/admin/login', data),
-  setup: (data) => adminInstance.post('/admin/setup', data),
-  getMe: () => adminInstance.get('/admin/me'),
-  
-  // Stats
-  getStats: () => adminInstance.get('/admin/stats'),
-  
-  // Users
-  listUsers: (params) => adminInstance.get('/admin/users', { params }),
-  getUser: (id) => adminInstance.get(`/admin/users/${id}`),
-  updateUser: (id, data) => adminInstance.patch(`/admin/users/${id}`, data),
-  grantSubscription: (id, data) => adminInstance.post(`/admin/users/${id}/subscription`, data),
-  impersonateUser: (id, data) => adminInstance.post(`/admin/users/${id}/impersonate`, data),
-  createTestBrand: (id, data) => adminInstance.post(`/admin/users/${id}/test-brand`, data),
-  
-  // Settings
-  getSettings: () => adminInstance.get('/admin/settings'),
-  updateSetting: (key, data) => adminInstance.put(`/admin/settings/${key}`, data),
-  
-  // Audit
-  getAuditLogs: (params) => adminInstance.get('/admin/audit-logs', { params }),
-  
-  // Costs (uses main api with admin token)
-  getCostOverview: (params) => adminInstance.get('/costs/admin/overview', { params }),
-  getTopUsers: (params) => adminInstance.get('/costs/admin/top-users', { params }),
-  getModelUsage: (params) => adminInstance.get('/costs/admin/model-usage', { params })
+  getOverview: (params) => api.get('/analytics/overview', { params }),
+  getContentPerformance: (params) => api.get('/analytics/content', { params }),
+  getSocialMetrics: (params) => api.get('/analytics/social', { params }),
+  getEngagement: (params) => api.get('/analytics/engagement', { params }),
 };
 
 export default api;
