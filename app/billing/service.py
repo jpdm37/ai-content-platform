@@ -256,7 +256,7 @@ class BillingService:
             user_id=user_id,
             usage_type="lora_training",
             quantity=1,
-            metadata={"cost_usd": cost_usd}
+            usage_metadata={"cost_usd": cost_usd}
         )
         
         return True
@@ -350,7 +350,7 @@ class BillingService:
         user_id: int,
         usage_type: str,
         quantity: int = 1,
-        metadata: Optional[Dict] = None
+        usage_metadata: Optional[Dict] = None
     ):
         """Create a usage record for tracking"""
         try:
@@ -359,7 +359,7 @@ class BillingService:
                 user_id=user_id,
                 usage_type=usage_type,
                 quantity=quantity,
-                metadata=metadata
+                usage_metadata=usage_metadata
             )
             self.db.add(record)
             self.db.commit()
