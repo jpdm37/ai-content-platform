@@ -167,6 +167,7 @@ export const socialApi = {
 // ============ LoRA / Avatar Training API ============
 export const loraApi = {
   list: () => api.get('/lora/models'),
+  listModels: () => api.get('/lora/models'), // Alias for compatibility
   getById: (id) => api.get(`/lora/models/${id}`),
   create: (data) => api.post('/lora/models', data),
   addImages: (modelId, images) => api.post(`/lora/models/${modelId}/images`, images),
@@ -190,7 +191,8 @@ export const videoApi = {
 
 // ============ Studio / Projects API ============
 export const studioApi = {
-  getProjects: () => api.get('/studio/projects'),
+  getProjects: (params) => api.get('/studio/projects', { params }),
+  listProjects: (params) => api.get('/studio/projects', { params }), // Alias for compatibility
   getProject: (id) => api.get(`/studio/projects/${id}`),
   createProject: (data) => api.post('/studio/projects', data),
   updateProject: (id, data) => api.put(`/studio/projects/${id}`, data),
