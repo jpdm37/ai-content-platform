@@ -9,17 +9,58 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from datetime import datetime, timedelta
+from pydantic import BaseModel
 import logging
 
 from app.core.database import get_db
 from app.auth.dependencies import get_current_user, get_current_verified_user
 from app.models.user import User
 from app.models import Trend, Category
-from app.schemas import TrendResponse, TrendCreate
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/trends", tags=["trends"])
+
+
+# ============ Pydantic Schemas ============
+class TrendCreate(BaseModel):
+    """Schema for creating a trend"""
+    category_id: int
+    title: str
+    description: Optional[str] = None
+    source: Optional[str] = None
+    source_url: Optional[str] = None
+    popularity_score: Optional[int] = 50
+    related_keywords: Optional[List[str]] = None
+
+
+class TrendResponse(BaseModel):
+    """Schema for trend response"""
+    id: int
+    category_id: int
+    title: str
+    description: Optional[str] = None
+    source: Optional[str] = None
+    source_url: Optional[str] = None
+    popularity_score: int = 0
+    related_keywords: Optional[List[str]] = None
+    scraped_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class ScrapeRequest(BaseModel):
+    """Schema for scrape request"""
+    category_id: Optional[int] = None
+
+
+class ScrapeResponse(BaseModel):
+    """Schema for scrape response"""
+    message: str
+    trends_found: int
+    category_id: Optional[int] = None
 
 
 # Sample trending topics for demo/testing
@@ -217,7 +258,7 @@ async def scrape_trends(
     
     for trend_data in SAMPLE_TRENDS:
         # Find the category
-        category_name = trend_data.pop("category_name", None)
+        category_name = trend_data.get("category_name")
         category = None
         
         if category_name:

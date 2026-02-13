@@ -8,14 +8,38 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.auth.dependencies import get_current_user, get_current_verified_user
 from app.models.user import User
 from app.models import Category
-from app.schemas import CategoryCreate, CategoryResponse
 
 router = APIRouter(prefix="/categories", tags=["categories"])
+
+
+# ============ Pydantic Schemas ============
+class CategoryCreate(BaseModel):
+    """Schema for creating a category"""
+    name: str
+    description: Optional[str] = None
+    keywords: Optional[List[str]] = None
+    image_prompt_template: Optional[str] = None
+    caption_prompt_template: Optional[str] = None
+
+
+class CategoryResponse(BaseModel):
+    """Schema for category response"""
+    id: int
+    name: str
+    description: Optional[str] = None
+    keywords: Optional[List[str]] = None
+    image_prompt_template: Optional[str] = None
+    caption_prompt_template: Optional[str] = None
+    user_id: Optional[int] = None
+    
+    class Config:
+        from_attributes = True
 
 
 # Default categories to seed (these are global/system categories)
@@ -64,31 +88,31 @@ DEFAULT_CATEGORIES = [
     },
     {
         "name": "Beauty",
-        "description": "Beauty, skincare, makeup, and self-care content",
+        "description": "Beauty, skincare, makeup, and self-care routines",
         "keywords": ["beauty", "skincare", "makeup", "cosmetics", "self-care"],
-        "image_prompt_template": "in a clean, aesthetic beauty setting with soft lighting",
-        "caption_prompt_template": "Create a beauty post about skincare, makeup, or self-care routines"
-    },
-    {
-        "name": "Business",
-        "description": "Business, entrepreneurship, and professional content",
-        "keywords": ["business", "entrepreneur", "startup", "professional", "career"],
-        "image_prompt_template": "in a modern office or professional setting",
-        "caption_prompt_template": "Create a professional post about business insights and entrepreneurship"
+        "image_prompt_template": "in a beautiful vanity or bathroom setting with beauty products",
+        "caption_prompt_template": "Create a beauty post about skincare routines and makeup tips"
     },
     {
         "name": "Entertainment",
         "description": "Movies, music, gaming, and pop culture",
         "keywords": ["entertainment", "movies", "music", "gaming", "pop culture"],
-        "image_prompt_template": "in an entertainment or media-focused setting",
-        "caption_prompt_template": "Create an engaging post about entertainment and pop culture"
+        "image_prompt_template": "in an entertainment setting with cozy movie night or gaming vibes",
+        "caption_prompt_template": "Create an entertaining post about movies, music, or gaming"
     },
     {
-        "name": "Education",
-        "description": "Educational content, tips, and how-to guides",
-        "keywords": ["education", "learning", "tutorial", "how-to", "tips"],
-        "image_prompt_template": "in a clean, educational setting with visual aids",
-        "caption_prompt_template": "Create an educational post that teaches or informs"
+        "name": "Business",
+        "description": "Business, entrepreneurship, and professional development",
+        "keywords": ["business", "entrepreneur", "startup", "professional", "career"],
+        "image_prompt_template": "in a modern office or co-working space with professional atmosphere",
+        "caption_prompt_template": "Create a business-focused post about entrepreneurship and success"
+    },
+    {
+        "name": "Pets",
+        "description": "Pets, animals, and pet care content",
+        "keywords": ["pets", "dogs", "cats", "animals", "pet care"],
+        "image_prompt_template": "with adorable pets in a cozy home or outdoor setting",
+        "caption_prompt_template": "Create a heartwarming pet post about furry friends and animal companions"
     }
 ]
 
@@ -97,38 +121,34 @@ DEFAULT_CATEGORIES = [
 async def list_categories(
     skip: int = 0,
     limit: int = 100,
-    include_global: bool = True,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """
-    List categories - includes global (system) categories and user's custom categories
+    List all categories.
+    Returns global categories (user_id=NULL) plus user's own categories.
     """
-    query = db.query(Category)
-    
-    # Check if Category model has user_id column
-    if hasattr(Category, 'user_id'):
-        if include_global:
-            # Get both global (user_id=None) and user's categories
-            query = query.filter(
-                or_(
-                    Category.user_id == None,
-                    Category.user_id == current_user.id
-                )
+    # Build query for global categories OR user's categories
+    if current_user:
+        query = db.query(Category).filter(
+            or_(
+                Category.user_id == None,  # Global categories
+                Category.user_id == current_user.id  # User's categories
             )
-        else:
-            # Only user's custom categories
-            query = query.filter(Category.user_id == current_user.id)
+        )
+    else:
+        # Anonymous users only see global categories
+        query = db.query(Category).filter(Category.user_id == None)
     
-    categories = query.order_by(Category.name).offset(skip).limit(limit).all()
+    categories = query.offset(skip).limit(limit).all()
     return categories
 
 
 @router.get("/{category_id}", response_model=CategoryResponse)
 async def get_category(
     category_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """Get a specific category by ID"""
     category = db.query(Category).filter(Category.id == category_id).first()
@@ -139,9 +159,9 @@ async def get_category(
             detail="Category not found"
         )
     
-    # Check access if category is user-specific
-    if hasattr(Category, 'user_id') and category.user_id is not None:
-        if category.user_id != current_user.id:
+    # Check access: must be global or owned by user
+    if category.user_id is not None:
+        if not current_user or category.user_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied to this category"
@@ -153,42 +173,30 @@ async def get_category(
 @router.post("/", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
 async def create_category(
     category_data: CategoryCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_verified_user)
+    current_user: User = Depends(get_current_verified_user),
+    db: Session = Depends(get_db)
 ):
-    """Create a new custom category for the user"""
-    # Check if category already exists for this user
-    query = db.query(Category).filter(Category.name == category_data.name)
+    """Create a new user-specific category"""
+    # Check if user already has a category with this name
+    existing = db.query(Category).filter(
+        Category.name == category_data.name,
+        Category.user_id == current_user.id
+    ).first()
     
-    if hasattr(Category, 'user_id'):
-        query = query.filter(
-            or_(
-                Category.user_id == None,
-                Category.user_id == current_user.id
-            )
-        )
-    
-    existing = query.first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Category with this name already exists"
+            detail="You already have a category with this name"
         )
     
-    # Create category data
-    category_dict = {
-        "name": category_data.name,
-        "description": category_data.description,
-        "keywords": category_data.keywords,
-        "image_prompt_template": category_data.image_prompt_template,
-        "caption_prompt_template": category_data.caption_prompt_template
-    }
-    
-    # Add user_id if the model supports it
-    if hasattr(Category, 'user_id'):
-        category_dict["user_id"] = current_user.id
-    
-    category = Category(**category_dict)
+    category = Category(
+        name=category_data.name,
+        description=category_data.description,
+        keywords=category_data.keywords,
+        image_prompt_template=category_data.image_prompt_template,
+        caption_prompt_template=category_data.caption_prompt_template,
+        user_id=current_user.id  # User-specific category
+    )
     
     db.add(category)
     db.commit()
@@ -200,10 +208,10 @@ async def create_category(
 @router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_category(
     category_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_verified_user)
+    current_user: User = Depends(get_current_verified_user),
+    db: Session = Depends(get_db)
 ):
-    """Delete a user's custom category (cannot delete global categories)"""
+    """Delete a user's category (cannot delete global categories)"""
     category = db.query(Category).filter(Category.id == category_id).first()
     
     if not category:
@@ -212,18 +220,19 @@ async def delete_category(
             detail="Category not found"
         )
     
-    # Check if it's a global category
-    if hasattr(Category, 'user_id'):
-        if category.user_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cannot delete system categories"
-            )
-        if category.user_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cannot delete another user's category"
-            )
+    # Cannot delete global categories
+    if category.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot delete global categories"
+        )
+    
+    # Can only delete own categories
+    if category.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot delete another user's category"
+        )
     
     db.delete(category)
     db.commit()
@@ -233,45 +242,39 @@ async def delete_category(
 
 @router.post("/seed", response_model=List[CategoryResponse])
 async def seed_default_categories(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_verified_user),
+    db: Session = Depends(get_db)
 ):
     """
-    Seed the database with default categories.
-    Creates global categories (user_id=None) that all users can access.
-    This endpoint requires authentication but any user can trigger it.
+    Seed the database with default global categories.
+    Only creates categories that don't already exist.
     """
     created = []
     
     for cat_data in DEFAULT_CATEGORIES:
-        # Check if already exists (global category)
-        query = db.query(Category).filter(Category.name == cat_data["name"])
-        
-        if hasattr(Category, 'user_id'):
-            query = query.filter(Category.user_id == None)
-        
-        existing = query.first()
+        # Check if global category with this name already exists
+        existing = db.query(Category).filter(
+            Category.name == cat_data["name"],
+            Category.user_id == None  # Global category
+        ).first()
         
         if existing:
             created.append(existing)
             continue
         
-        # Create new global category
-        category_dict = dict(cat_data)
-        if hasattr(Category, 'user_id'):
-            category_dict["user_id"] = None  # Global category
-        
-        try:
-            category = Category(**category_dict)
-            db.add(category)
-            db.commit()
-            db.refresh(category)
-            created.append(category)
-        except Exception as e:
-            db.rollback()
-            # If individual category fails, continue with others
-            print(f"Failed to create category {cat_data['name']}: {e}")
-            continue
+        # Create as global category (user_id=None)
+        category = Category(
+            name=cat_data["name"],
+            description=cat_data["description"],
+            keywords=cat_data["keywords"],
+            image_prompt_template=cat_data["image_prompt_template"],
+            caption_prompt_template=cat_data["caption_prompt_template"],
+            user_id=None  # Global category
+        )
+        db.add(category)
+        db.commit()
+        db.refresh(category)
+        created.append(category)
     
     return created
 
@@ -279,26 +282,30 @@ async def seed_default_categories(
 @router.get("/by-name/{name}", response_model=CategoryResponse)
 async def get_category_by_name(
     name: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    """Get a category by name"""
-    query = db.query(Category).filter(Category.name.ilike(name))
+    """Get a category by name (case-insensitive)"""
+    # First try to find user's category, then global
+    if current_user:
+        category = db.query(Category).filter(
+            Category.name.ilike(name),
+            Category.user_id == current_user.id
+        ).first()
+        
+        if category:
+            return category
     
-    if hasattr(Category, 'user_id'):
-        query = query.filter(
-            or_(
-                Category.user_id == None,
-                Category.user_id == current_user.id
-            )
-        )
-    
-    category = query.first()
+    # Fall back to global category
+    category = db.query(Category).filter(
+        Category.name.ilike(name),
+        Category.user_id == None
+    ).first()
     
     if not category:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Category not found"
+            detail=f"Category '{name}' not found"
         )
     
     return category
