@@ -1,7 +1,5 @@
 /**
- * API Service - Complete with Avatar endpoints for onboarding
- * 
- * This file should replace: frontend/src/services/api.js
+ * API Service - Complete with all endpoints for the platform
  */
 import axios from 'axios';
 
@@ -94,16 +92,9 @@ export const authApi = {
 
 // ============ Avatar API (for onboarding) ============
 export const avatarApi = {
-  // Generate concepts from description
   generateConcepts: (config) => api.post('/avatar/generate-concepts', config),
-  
-  // Generate training images from selected concept
   generateTrainingImages: (data) => api.post('/avatar/generate-training-images', data),
-  
-  // Create LoRA model from generated images
   createFromGenerated: (data) => api.post('/avatar/create-from-generated', data),
-  
-  // Upload existing images for training
   uploadImages: (brandId, files) => {
     const formData = new FormData();
     files.forEach(file => formData.append('files', file));
@@ -111,14 +102,8 @@ export const avatarApi = {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
-  
-  // Get avatar training status
   getStatus: (avatarId) => api.get(`/avatar/status/${avatarId}`),
-  
-  // List all user avatars
   list: () => api.get('/avatar/list'),
-  
-  // Delete avatar
   delete: (avatarId) => api.delete(`/avatar/${avatarId}`),
 };
 
@@ -173,49 +158,43 @@ export const socialApi = {
   connect: (platform, data) => api.post(`/social/connect/${platform}`, data),
   disconnect: (id) => api.delete(`/social/accounts/${id}`),
   getCallback: (platform, code) => api.get(`/social/callback/${platform}`, { params: { code } }),
-  
-  // Posting
   post: (accountId, data) => api.post(`/social/accounts/${accountId}/post`, data),
   schedule: (data) => api.post('/social/schedule', data),
-  
-  // Scheduled posts
   getScheduled: (params) => api.get('/social/scheduled', { params }),
   cancelScheduled: (id) => api.delete(`/social/scheduled/${id}`),
 };
 
 // ============ LoRA / Avatar Training API ============
 export const loraApi = {
-  // List user's LoRA models
   list: () => api.get('/lora/models'),
   getById: (id) => api.get(`/lora/models/${id}`),
-  
-  // Create and train
   create: (data) => api.post('/lora/models', data),
   addImages: (modelId, images) => api.post(`/lora/models/${modelId}/images`, images),
   startTraining: (modelId, config) => api.post(`/lora/models/${modelId}/train`, config),
-  
-  // Training status
   getProgress: (modelId) => api.get(`/lora/models/${modelId}/progress`),
   cancelTraining: (modelId) => api.post(`/lora/models/${modelId}/cancel`),
-  
-  // Generation with trained model
   generate: (modelId, data) => api.post(`/lora/models/${modelId}/generate`, data),
   getSamples: (modelId) => api.get(`/lora/models/${modelId}/samples`),
-  
-  // Delete
   delete: (modelId) => api.delete(`/lora/models/${modelId}`),
+};
+
+// ============ Video API ============
+export const videoApi = {
+  getAll: (params) => api.get('/video', { params }),
+  getById: (id) => api.get(`/video/${id}`),
+  create: (data) => api.post('/video', data),
+  generate: (data) => api.post('/video/generate', data),
+  getStatus: (id) => api.get(`/video/${id}/status`),
+  delete: (id) => api.delete(`/video/${id}`),
 };
 
 // ============ Studio / Projects API ============
 export const studioApi = {
-  // Projects
   getProjects: () => api.get('/studio/projects'),
   getProject: (id) => api.get(`/studio/projects/${id}`),
   createProject: (data) => api.post('/studio/projects', data),
   updateProject: (id, data) => api.put(`/studio/projects/${id}`, data),
   deleteProject: (id) => api.delete(`/studio/projects/${id}`),
-  
-  // Assets
   getAssets: (projectId) => api.get(`/studio/projects/${projectId}/assets`),
   uploadAsset: (projectId, file) => {
     const formData = new FormData();
@@ -229,17 +208,12 @@ export const studioApi = {
 
 // ============ Billing API ============
 export const billingApi = {
-  // Subscription
   getSubscription: () => api.get('/billing/subscription'),
   getPlans: () => api.get('/billing/plans'),
   createCheckout: (priceId) => api.post('/billing/checkout', { price_id: priceId }),
   manageSubscription: () => api.post('/billing/portal'),
-  
-  // Usage
   getUsage: () => api.get('/billing/usage'),
   getDashboard: () => api.get('/billing/dashboard'),
-  
-  // Limits
   checkLimit: (type) => api.get(`/billing/check-limit/${type}`),
 };
 
@@ -247,12 +221,8 @@ export const billingApi = {
 export const onboardingApi = {
   getStatus: () => api.get('/onboarding/status'),
   getProgress: () => api.get('/onboarding/progress'),
-  
-  // Steps
   completeStep: (step, data) => api.post(`/onboarding/step/${step}`, data),
   skipStep: (step) => api.post(`/onboarding/skip/${step}`),
-  
-  // Complete onboarding
   complete: () => api.post('/onboarding/complete'),
 };
 
@@ -276,6 +246,76 @@ export const analyticsApi = {
   getContentPerformance: (params) => api.get('/analytics/content', { params }),
   getSocialMetrics: (params) => api.get('/analytics/social', { params }),
   getEngagement: (params) => api.get('/analytics/engagement', { params }),
+};
+
+// ============ Brand Voice API ============
+export const brandVoiceApi = {
+  analyze: (brandId, data) => api.post(`/brandvoice/${brandId}/analyze`, data),
+  getVoice: (brandId) => api.get(`/brandvoice/${brandId}`),
+  updateVoice: (brandId, data) => api.put(`/brandvoice/${brandId}`, data),
+  generateContent: (brandId, data) => api.post(`/brandvoice/${brandId}/generate`, data),
+};
+
+// ============ Assistant API ============
+export const assistantApi = {
+  chat: (data) => api.post('/assistant/chat', data),
+  getHistory: () => api.get('/assistant/history'),
+  clearHistory: () => api.delete('/assistant/history'),
+  getSuggestions: (brandId) => api.get(`/assistant/suggestions/${brandId}`),
+};
+
+// ============ Admin API ============
+export const adminApi = {
+  login: (data) => api.post('/admin/login', data),
+  getDashboard: () => api.get('/admin/dashboard'),
+  getUsers: (params) => api.get('/admin/users', { params }),
+  getUser: (id) => api.get(`/admin/users/${id}`),
+  updateUser: (id, data) => api.put(`/admin/users/${id}`, data),
+  deleteUser: (id) => api.delete(`/admin/users/${id}`),
+  getStats: () => api.get('/admin/stats'),
+  getSystemHealth: () => api.get('/admin/health'),
+};
+
+// ============ Costs API ============
+export const costsApi = {
+  getDashboard: () => api.get('/costs/dashboard'),
+  getBreakdown: (params) => api.get('/costs/breakdown', { params }),
+  getHistory: (params) => api.get('/costs/history', { params }),
+};
+
+// ============ Templates API ============
+export const templatesApi = {
+  getAll: () => api.get('/templates'),
+  getById: (id) => api.get(`/templates/${id}`),
+  create: (data) => api.post('/templates', data),
+  update: (id, data) => api.put(`/templates/${id}`, data),
+  delete: (id) => api.delete(`/templates/${id}`),
+  useTemplate: (id, data) => api.post(`/templates/${id}/use`, data),
+};
+
+// ============ A/B Testing API ============
+export const abTestingApi = {
+  getTests: () => api.get('/abtesting/tests'),
+  getTest: (id) => api.get(`/abtesting/tests/${id}`),
+  createTest: (data) => api.post('/abtesting/tests', data),
+  updateTest: (id, data) => api.put(`/abtesting/tests/${id}`, data),
+  deleteTest: (id) => api.delete(`/abtesting/tests/${id}`),
+  getResults: (id) => api.get(`/abtesting/tests/${id}/results`),
+};
+
+// ============ Performance API ============
+export const performanceApi = {
+  getDashboard: () => api.get('/performance/dashboard'),
+  getMetrics: (params) => api.get('/performance/metrics', { params }),
+  getInsights: () => api.get('/performance/insights'),
+};
+
+// ============ Digest API ============
+export const digestApi = {
+  getDaily: () => api.get('/digest/daily'),
+  getWeekly: () => api.get('/digest/weekly'),
+  subscribe: (data) => api.post('/digest/subscribe', data),
+  unsubscribe: () => api.delete('/digest/subscribe'),
 };
 
 export default api;
