@@ -1,584 +1,420 @@
 """
-Stripe Billing Service
+Billing Service
 
-Handles:
-- Customer creation
-- Subscription management
-- Checkout sessions
-- Billing portal
-- Webhooks
-- Usage tracking
+Handles subscription management, usage tracking, and limit enforcement.
 """
-import logging
-from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
-import stripe
+from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+import logging
 
-from app.core.config import get_settings
-from app.models.user import User
 from app.billing.models import (
     Subscription, Payment, UsageRecord, Coupon,
     SubscriptionTier, SubscriptionStatus, PaymentStatus,
     PLAN_LIMITS
 )
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
-
-# Initialize Stripe
-if settings.stripe_secret_key:
-    stripe.api_key = settings.stripe_secret_key
 
 
 class BillingService:
-    """Service for managing subscriptions and billing via Stripe"""
+    """Service for billing and subscription operations"""
     
     def __init__(self, db: Session):
         self.db = db
-        
-        # Map tiers to Stripe price IDs
-        self.price_ids = {
-            SubscriptionTier.CREATOR: settings.stripe_price_id_creator,
-            SubscriptionTier.PRO: settings.stripe_price_id_pro,
-            SubscriptionTier.AGENCY: settings.stripe_price_id_agency,
-        }
     
-    # ==================== Customer Management ====================
+    # ==================== Subscription Management ====================
     
-    def get_or_create_customer(self, user: User) -> str:
-        """Get or create Stripe customer for user"""
+    def get_or_create_subscription(self, user_id: int) -> Subscription:
+        """Get existing subscription or create a free one"""
         subscription = self.db.query(Subscription).filter(
-            Subscription.user_id == user.id
+            Subscription.user_id == user_id
         ).first()
         
-        if subscription and subscription.stripe_customer_id:
-            return subscription.stripe_customer_id
-        
-        # Create Stripe customer
-        customer = stripe.Customer.create(
-            email=user.email,
-            name=user.full_name,
-            metadata={"user_id": str(user.id)}
-        )
-        
-        # Create or update subscription record
         if not subscription:
             subscription = Subscription(
-                user_id=user.id,
+                user_id=user_id,
                 tier=SubscriptionTier.FREE,
                 status=SubscriptionStatus.ACTIVE,
-                stripe_customer_id=customer.id
-            )
-            self.db.add(subscription)
-        else:
-            subscription.stripe_customer_id = customer.id
-        
-        self.db.commit()
-        return customer.id
-    
-    def get_subscription(self, user: User) -> Optional[Subscription]:
-        """Get user's subscription"""
-        return self.db.query(Subscription).filter(
-            Subscription.user_id == user.id
-        ).first()
-    
-    def ensure_subscription(self, user: User) -> Subscription:
-        """Ensure user has a subscription record (at least free tier)"""
-        subscription = self.get_subscription(user)
-        if not subscription:
-            subscription = Subscription(
-                user_id=user.id,
-                tier=SubscriptionTier.FREE,
-                status=SubscriptionStatus.ACTIVE
+                generations_used=0,
+                generations_reset_at=datetime.utcnow()
             )
             self.db.add(subscription)
             self.db.commit()
             self.db.refresh(subscription)
+        
         return subscription
     
-    # ==================== Checkout ====================
-    
-    def create_checkout_session(
-        self,
-        user: User,
-        tier: SubscriptionTier,
-        success_url: str,
-        cancel_url: str,
-        coupon_code: Optional[str] = None
-    ) -> Dict[str, str]:
-        """Create Stripe checkout session for subscription"""
-        if tier == SubscriptionTier.FREE:
-            raise ValueError("Cannot checkout for free tier")
-        
-        price_id = self.price_ids.get(tier)
-        if not price_id:
-            raise ValueError(f"No price configured for tier: {tier}")
-        
-        customer_id = self.get_or_create_customer(user)
-        
-        # Build checkout params
-        checkout_params = {
-            "customer": customer_id,
-            "payment_method_types": ["card"],
-            "line_items": [{
-                "price": price_id,
-                "quantity": 1,
-            }],
-            "mode": "subscription",
-            "success_url": success_url + "?session_id={CHECKOUT_SESSION_ID}",
-            "cancel_url": cancel_url,
-            "subscription_data": {
-                "metadata": {
-                    "user_id": str(user.id),
-                    "tier": tier.value
-                }
-            },
-            "allow_promotion_codes": True,
-            "billing_address_collection": "auto",
-        }
-        
-        # Apply coupon if provided
-        if coupon_code:
-            coupon = self._validate_coupon(coupon_code, tier)
-            if coupon and coupon.stripe_coupon_id:
-                checkout_params["discounts"] = [{"coupon": coupon.stripe_coupon_id}]
-        
-        session = stripe.checkout.Session.create(**checkout_params)
+    def get_user_limits(self, user_id: int) -> Dict[str, Any]:
+        """Get current limits for user based on subscription tier"""
+        subscription = self.get_or_create_subscription(user_id)
+        tier_limits = PLAN_LIMITS.get(subscription.tier, PLAN_LIMITS[SubscriptionTier.FREE])
         
         return {
-            "checkout_url": session.url,
-            "session_id": session.id
+            "tier": subscription.tier.value,
+            "tier_name": tier_limits.get("name", "Free"),
+            "status": subscription.status.value,
+            **tier_limits
         }
     
-    def create_billing_portal_session(
-        self,
-        user: User,
-        return_url: str
-    ) -> str:
-        """Create Stripe billing portal session"""
-        subscription = self.get_subscription(user)
-        if not subscription or not subscription.stripe_customer_id:
-            raise ValueError("No billing account found")
+    def get_user_usage(self, user_id: int) -> Dict[str, int]:
+        """Get current usage counts for user"""
+        subscription = self.get_or_create_subscription(user_id)
         
-        session = stripe.billing_portal.Session.create(
-            customer=subscription.stripe_customer_id,
-            return_url=return_url
-        )
+        # Check if usage needs reset (monthly)
+        self._check_usage_reset(subscription)
         
-        return session.url
-    
-    # ==================== Subscription Management ====================
-    
-    def change_plan(
-        self,
-        user: User,
-        new_tier: SubscriptionTier,
-        prorate: bool = True
-    ) -> Dict[str, Any]:
-        """Change subscription plan (upgrade/downgrade)"""
-        subscription = self.get_subscription(user)
-        if not subscription or not subscription.stripe_subscription_id:
-            raise ValueError("No active subscription to change")
+        # Count resources
+        from app.models import Brand, SocialAccount
         
-        if new_tier == SubscriptionTier.FREE:
-            # Downgrade to free = cancel
-            return self.cancel_subscription(user)
+        brands_count = self.db.query(Brand).filter(Brand.user_id == user_id).count()
         
-        new_price_id = self.price_ids.get(new_tier)
-        if not new_price_id:
-            raise ValueError(f"No price configured for tier: {new_tier}")
-        
-        # Get current Stripe subscription
-        stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
-        
-        # Update subscription
-        updated_sub = stripe.Subscription.modify(
-            subscription.stripe_subscription_id,
-            items=[{
-                "id": stripe_sub["items"]["data"][0]["id"],
-                "price": new_price_id,
-            }],
-            proration_behavior="create_prorations" if prorate else "none",
-            metadata={"tier": new_tier.value}
-        )
-        
-        # Update local record
-        subscription.tier = new_tier
-        subscription.stripe_price_id = new_price_id
-        self.db.commit()
-        
-        return {
-            "success": True,
-            "message": f"Plan changed to {new_tier.value}",
-            "new_tier": new_tier,
-            "effective_date": datetime.utcnow()
-        }
-    
-    def cancel_subscription(
-        self,
-        user: User,
-        at_period_end: bool = True
-    ) -> Dict[str, Any]:
-        """Cancel subscription"""
-        subscription = self.get_subscription(user)
-        if not subscription or not subscription.stripe_subscription_id:
-            raise ValueError("No active subscription to cancel")
-        
-        if at_period_end:
-            # Cancel at end of period
-            stripe.Subscription.modify(
-                subscription.stripe_subscription_id,
-                cancel_at_period_end=True
-            )
-            subscription.cancel_at_period_end = True
-        else:
-            # Cancel immediately
-            stripe.Subscription.delete(subscription.stripe_subscription_id)
-            subscription.status = SubscriptionStatus.CANCELED
-            subscription.canceled_at = datetime.utcnow()
-            subscription.tier = SubscriptionTier.FREE
-        
-        self.db.commit()
-        
-        return {
-            "success": True,
-            "message": "Subscription cancelled",
-            "effective_date": subscription.current_period_end if at_period_end else datetime.utcnow()
-        }
-    
-    def reactivate_subscription(self, user: User) -> Dict[str, Any]:
-        """Reactivate a subscription that's set to cancel"""
-        subscription = self.get_subscription(user)
-        if not subscription or not subscription.stripe_subscription_id:
-            raise ValueError("No subscription to reactivate")
-        
-        if not subscription.cancel_at_period_end:
-            raise ValueError("Subscription is not set to cancel")
-        
-        stripe.Subscription.modify(
-            subscription.stripe_subscription_id,
-            cancel_at_period_end=False
-        )
-        
-        subscription.cancel_at_period_end = False
-        self.db.commit()
-        
-        return {"success": True, "message": "Subscription reactivated"}
-    
-    # ==================== Webhook Handling ====================
-    
-    def handle_webhook(self, payload: bytes, sig_header: str) -> Dict[str, Any]:
-        """Handle Stripe webhook events"""
         try:
-            event = stripe.Webhook.construct_event(
-                payload, sig_header, settings.stripe_webhook_secret
-            )
-        except ValueError:
-            raise ValueError("Invalid payload")
-        except stripe.error.SignatureVerificationError:
-            raise ValueError("Invalid signature")
-        
-        event_type = event["type"]
-        data = event["data"]["object"]
-        
-        handlers = {
-            "checkout.session.completed": self._handle_checkout_completed,
-            "customer.subscription.created": self._handle_subscription_created,
-            "customer.subscription.updated": self._handle_subscription_updated,
-            "customer.subscription.deleted": self._handle_subscription_deleted,
-            "invoice.paid": self._handle_invoice_paid,
-            "invoice.payment_failed": self._handle_payment_failed,
-        }
-        
-        handler = handlers.get(event_type)
-        if handler:
-            return handler(data)
-        
-        return {"received": True, "handled": False}
-    
-    def _handle_checkout_completed(self, session: dict) -> Dict:
-        """Handle successful checkout"""
-        customer_id = session.get("customer")
-        subscription_id = session.get("subscription")
-        
-        if not subscription_id:
-            return {"handled": False, "reason": "No subscription in session"}
-        
-        # Find user by customer ID
-        subscription = self.db.query(Subscription).filter(
-            Subscription.stripe_customer_id == customer_id
-        ).first()
-        
-        if subscription:
-            subscription.stripe_subscription_id = subscription_id
-            self.db.commit()
-        
-        return {"handled": True}
-    
-    def _handle_subscription_created(self, stripe_sub: dict) -> Dict:
-        """Handle new subscription"""
-        return self._sync_subscription(stripe_sub)
-    
-    def _handle_subscription_updated(self, stripe_sub: dict) -> Dict:
-        """Handle subscription update"""
-        return self._sync_subscription(stripe_sub)
-    
-    def _handle_subscription_deleted(self, stripe_sub: dict) -> Dict:
-        """Handle subscription cancellation"""
-        subscription = self.db.query(Subscription).filter(
-            Subscription.stripe_subscription_id == stripe_sub["id"]
-        ).first()
-        
-        if subscription:
-            subscription.status = SubscriptionStatus.CANCELED
-            subscription.tier = SubscriptionTier.FREE
-            subscription.canceled_at = datetime.utcnow()
-            self.db.commit()
-        
-        return {"handled": True}
-    
-    def _handle_invoice_paid(self, invoice: dict) -> Dict:
-        """Handle successful payment"""
-        subscription = self.db.query(Subscription).filter(
-            Subscription.stripe_customer_id == invoice.get("customer")
-        ).first()
-        
-        if subscription:
-            # Record payment
-            payment = Payment(
-                subscription_id=subscription.id,
-                user_id=subscription.user_id,
-                stripe_invoice_id=invoice["id"],
-                stripe_payment_intent_id=invoice.get("payment_intent"),
-                amount=invoice["amount_paid"],
-                currency=invoice["currency"],
-                status=PaymentStatus.SUCCEEDED,
-                paid_at=datetime.utcnow()
-            )
-            self.db.add(payment)
-            
-            # Reset usage on new billing period
-            subscription.generations_used = 0
-            subscription.generations_reset_at = datetime.utcnow()
-            
-            self.db.commit()
-        
-        return {"handled": True}
-    
-    def _handle_payment_failed(self, invoice: dict) -> Dict:
-        """Handle failed payment"""
-        subscription = self.db.query(Subscription).filter(
-            Subscription.stripe_customer_id == invoice.get("customer")
-        ).first()
-        
-        if subscription:
-            subscription.status = SubscriptionStatus.PAST_DUE
-            
-            payment = Payment(
-                subscription_id=subscription.id,
-                user_id=subscription.user_id,
-                stripe_invoice_id=invoice["id"],
-                amount=invoice["amount_due"],
-                currency=invoice["currency"],
-                status=PaymentStatus.FAILED
-            )
-            self.db.add(payment)
-            self.db.commit()
-        
-        return {"handled": True}
-    
-    def _sync_subscription(self, stripe_sub: dict) -> Dict:
-        """Sync Stripe subscription to local database"""
-        subscription = self.db.query(Subscription).filter(
-            Subscription.stripe_subscription_id == stripe_sub["id"]
-        ).first()
-        
-        if not subscription:
-            subscription = self.db.query(Subscription).filter(
-                Subscription.stripe_customer_id == stripe_sub["customer"]
-            ).first()
-        
-        if not subscription:
-            return {"handled": False, "reason": "Subscription not found"}
-        
-        # Map Stripe status
-        status_map = {
-            "active": SubscriptionStatus.ACTIVE,
-            "past_due": SubscriptionStatus.PAST_DUE,
-            "canceled": SubscriptionStatus.CANCELED,
-            "incomplete": SubscriptionStatus.INCOMPLETE,
-            "trialing": SubscriptionStatus.TRIALING,
-            "unpaid": SubscriptionStatus.UNPAID,
-        }
-        
-        # Get tier from metadata or price
-        tier_str = stripe_sub.get("metadata", {}).get("tier", "creator")
-        tier = SubscriptionTier(tier_str) if tier_str in [t.value for t in SubscriptionTier] else SubscriptionTier.CREATOR
-        
-        # Update subscription
-        subscription.stripe_subscription_id = stripe_sub["id"]
-        subscription.tier = tier
-        subscription.status = status_map.get(stripe_sub["status"], SubscriptionStatus.ACTIVE)
-        subscription.current_period_start = datetime.fromtimestamp(stripe_sub["current_period_start"])
-        subscription.current_period_end = datetime.fromtimestamp(stripe_sub["current_period_end"])
-        subscription.cancel_at_period_end = stripe_sub.get("cancel_at_period_end", False)
-        
-        if stripe_sub.get("trial_end"):
-            subscription.trial_end = datetime.fromtimestamp(stripe_sub["trial_end"])
-        
-        self.db.commit()
-        return {"handled": True}
-    
-    # ==================== Usage Tracking ====================
-    
-    def check_limit(self, user: User, feature: str) -> Dict[str, Any]:
-        """Check if user is within limits for a feature"""
-        subscription = self.ensure_subscription(user)
-        limits = PLAN_LIMITS.get(subscription.tier, PLAN_LIMITS[SubscriptionTier.FREE])
-        
-        # Count current usage
-        if feature == "generations":
-            used = subscription.generations_used
-            limit = limits["generations_per_month"]
-        elif feature == "brands":
-            from app.models import Brand
-            used = self.db.query(Brand).filter(Brand.user_id == user.id).count()
-            limit = limits["brands"]
-        elif feature == "lora_models":
-            from app.lora.models import LoraModel
-            used = self.db.query(LoraModel).filter(LoraModel.user_id == user.id).count()
-            limit = limits["lora_models"]
-        elif feature == "social_accounts":
-            from app.social.models import SocialAccount
-            used = self.db.query(SocialAccount).filter(SocialAccount.user_id == user.id).count()
-            limit = limits["social_accounts"]
-        else:
-            return {"allowed": True, "used": 0, "limit": -1}
-        
-        allowed = limit == -1 or used < limit
-        
-        return {
-            "allowed": allowed,
-            "used": used,
-            "limit": limit,
-            "remaining": max(0, limit - used) if limit != -1 else -1
-        }
-    
-    def record_usage(
-        self,
-        user: User,
-        usage_type: str,
-        quantity: int = 1,
-        metadata: Optional[Dict] = None
-    ):
-        """Record feature usage"""
-        subscription = self.ensure_subscription(user)
-        
-        # Update generation count
-        if usage_type == "generation":
-            subscription.generations_used += quantity
-        
-        # Create usage record
-        record = UsageRecord(
-            subscription_id=subscription.id,
-            user_id=user.id,
-            usage_type=usage_type,
-            quantity=quantity,
-            metadata=metadata
-        )
-        self.db.add(record)
-        self.db.commit()
-    
-    def get_usage_summary(self, user: User) -> Dict[str, Any]:
-        """Get user's usage summary"""
-        subscription = self.ensure_subscription(user)
-        limits = PLAN_LIMITS.get(subscription.tier, PLAN_LIMITS[SubscriptionTier.FREE])
-        
-        from app.models import Brand
-        from app.lora.models import LoraModel
-        
-        brands_count = self.db.query(Brand).filter(Brand.user_id == user.id).count()
-        lora_count = self.db.query(LoraModel).filter(LoraModel.user_id == user.id).count()
-        
-        # Try to get social accounts count
-        try:
-            from app.social.models import SocialAccount, ScheduledPost
-            social_count = self.db.query(SocialAccount).filter(SocialAccount.user_id == user.id).count()
-            scheduled_count = self.db.query(ScheduledPost).filter(
-                ScheduledPost.user_id == user.id,
-                ScheduledPost.status == "scheduled"
+            social_accounts_count = self.db.query(SocialAccount).filter(
+                SocialAccount.user_id == user_id
             ).count()
         except:
-            social_count = 0
+            social_accounts_count = 0
+        
+        try:
+            from app.lora.models import LoraModel
+            lora_count = self.db.query(LoraModel).filter(
+                LoraModel.user_id == user_id
+            ).count()
+        except:
+            lora_count = 0
+        
+        try:
+            from app.models import ScheduledPost
+            scheduled_count = self.db.query(ScheduledPost).filter(
+                ScheduledPost.user_id == user_id,
+                ScheduledPost.status == 'pending'
+            ).count()
+        except:
             scheduled_count = 0
         
         return {
             "generations_used": subscription.generations_used,
-            "generations_limit": limits["generations_per_month"],
-            "generations_remaining": max(0, limits["generations_per_month"] - subscription.generations_used),
-            "brands_used": brands_count,
-            "brands_limit": limits["brands"],
-            "lora_models_used": lora_count,
-            "lora_models_limit": limits["lora_models"],
-            "social_accounts_used": social_count,
-            "social_accounts_limit": limits["social_accounts"],
-            "scheduled_posts_used": scheduled_count,
-            "scheduled_posts_limit": limits["scheduled_posts"],
-            "reset_date": subscription.current_period_end
+            "brands_count": brands_count,
+            "social_accounts_count": social_accounts_count,
+            "lora_models_count": lora_count,
+            "scheduled_posts_count": scheduled_count
         }
     
-    # ==================== Coupons ====================
+    # ==================== Limit Checking ====================
     
-    def _validate_coupon(
-        self,
-        code: str,
-        tier: SubscriptionTier
-    ) -> Optional[Coupon]:
-        """Validate a coupon code"""
-        coupon = self.db.query(Coupon).filter(
-            Coupon.code == code.upper(),
-            Coupon.is_active == True
-        ).first()
+    def check_generation_limit(self, user_id: int) -> Dict[str, Any]:
+        """Check if user can generate more content"""
+        subscription = self.get_or_create_subscription(user_id)
+        self._check_usage_reset(subscription)
         
-        if not coupon:
-            return None
+        limits = PLAN_LIMITS.get(subscription.tier, PLAN_LIMITS[SubscriptionTier.FREE])
+        max_generations = limits.get("generations_per_month", 10)
         
-        # Check validity
-        now = datetime.utcnow()
-        if coupon.valid_until and coupon.valid_until < now:
-            return None
-        
-        if coupon.max_redemptions and coupon.times_redeemed >= coupon.max_redemptions:
-            return None
-        
-        # Check tier restriction
-        if coupon.applicable_tiers:
-            if tier.value not in coupon.applicable_tiers:
-                return None
-        
-        return coupon
-    
-    def apply_coupon(self, code: str, tier: SubscriptionTier) -> Dict[str, Any]:
-        """Validate and return coupon details"""
-        coupon = self._validate_coupon(code, tier)
-        
-        if not coupon:
+        if max_generations == -1:  # Unlimited
             return {
-                "valid": False,
-                "message": "Invalid or expired coupon code"
+                "allowed": True,
+                "used": subscription.generations_used,
+                "limit": "unlimited",
+                "remaining": "unlimited"
             }
         
+        allowed = subscription.generations_used < max_generations
+        
         return {
-            "valid": True,
-            "code": coupon.code,
-            "percent_off": coupon.percent_off,
-            "amount_off": coupon.amount_off,
-            "duration": coupon.duration,
-            "message": f"Coupon applied: {coupon.percent_off}% off" if coupon.percent_off else f"Coupon applied: ${coupon.amount_off/100} off"
+            "allowed": allowed,
+            "used": subscription.generations_used,
+            "limit": max_generations,
+            "remaining": max(0, max_generations - subscription.generations_used),
+            "message": None if allowed else f"You've reached your monthly limit of {max_generations} generations. Upgrade to continue."
         }
+    
+    def check_brand_limit(self, user_id: int) -> Dict[str, Any]:
+        """Check if user can create more brands"""
+        from app.models import Brand
+        
+        limits = self.get_user_limits(user_id)
+        max_brands = limits.get("brands", 1)
+        
+        current_count = self.db.query(Brand).filter(Brand.user_id == user_id).count()
+        allowed = current_count < max_brands
+        
+        return {
+            "allowed": allowed,
+            "used": current_count,
+            "limit": max_brands,
+            "remaining": max(0, max_brands - current_count),
+            "message": None if allowed else f"You've reached your limit of {max_brands} brands. Upgrade to create more."
+        }
+    
+    def check_lora_limit(self, user_id: int) -> Dict[str, Any]:
+        """Check if user can create more LoRA avatars"""
+        limits = self.get_user_limits(user_id)
+        max_lora = limits.get("lora_models", 0)
+        
+        try:
+            from app.lora.models import LoraModel
+            current_count = self.db.query(LoraModel).filter(
+                LoraModel.user_id == user_id
+            ).count()
+        except:
+            current_count = 0
+        
+        allowed = current_count < max_lora
+        
+        return {
+            "allowed": allowed,
+            "used": current_count,
+            "limit": max_lora,
+            "remaining": max(0, max_lora - current_count),
+            "message": None if allowed else f"You've reached your limit of {max_lora} avatars. Upgrade to create more."
+        }
+    
+    def check_social_account_limit(self, user_id: int) -> Dict[str, Any]:
+        """Check if user can connect more social accounts"""
+        limits = self.get_user_limits(user_id)
+        max_accounts = limits.get("social_accounts", 0)
+        
+        try:
+            from app.models import SocialAccount
+            current_count = self.db.query(SocialAccount).filter(
+                SocialAccount.user_id == user_id
+            ).count()
+        except:
+            current_count = 0
+        
+        allowed = current_count < max_accounts
+        
+        return {
+            "allowed": allowed,
+            "used": current_count,
+            "limit": max_accounts,
+            "remaining": max(0, max_accounts - current_count),
+            "message": None if allowed else f"You've reached your limit of {max_accounts} social accounts. Upgrade to connect more."
+        }
+    
+    def check_scheduled_post_limit(self, user_id: int) -> Dict[str, Any]:
+        """Check if user can schedule more posts"""
+        limits = self.get_user_limits(user_id)
+        max_scheduled = limits.get("scheduled_posts", 0)
+        
+        if max_scheduled == -1:  # Unlimited
+            return {
+                "allowed": True,
+                "used": 0,
+                "limit": "unlimited",
+                "remaining": "unlimited"
+            }
+        
+        try:
+            from app.models import ScheduledPost
+            current_count = self.db.query(ScheduledPost).filter(
+                ScheduledPost.user_id == user_id,
+                ScheduledPost.status == 'pending'
+            ).count()
+        except:
+            current_count = 0
+        
+        allowed = current_count < max_scheduled
+        
+        return {
+            "allowed": allowed,
+            "used": current_count,
+            "limit": max_scheduled,
+            "remaining": max(0, max_scheduled - current_count),
+            "message": None if allowed else f"You've reached your limit of {max_scheduled} scheduled posts. Upgrade to schedule more."
+        }
+    
+    # ==================== Usage Recording ====================
+    
+    def record_generation(self, user_id: int, count: int = 1) -> bool:
+        """Record generation usage"""
+        subscription = self.get_or_create_subscription(user_id)
+        self._check_usage_reset(subscription)
+        
+        subscription.generations_used += count
+        self.db.commit()
+        
+        # Create usage record
+        self._create_usage_record(
+            subscription_id=subscription.id,
+            user_id=user_id,
+            usage_type="generation",
+            quantity=count
+        )
+        
+        return True
+    
+    def record_lora_training(self, user_id: int, cost_usd: float = 0) -> bool:
+        """Record LoRA training usage"""
+        subscription = self.get_or_create_subscription(user_id)
+        
+        self._create_usage_record(
+            subscription_id=subscription.id,
+            user_id=user_id,
+            usage_type="lora_training",
+            quantity=1,
+            metadata={"cost_usd": cost_usd}
+        )
+        
+        return True
+    
+    def record_scheduled_post(self, user_id: int) -> bool:
+        """Record scheduled post usage"""
+        subscription = self.get_or_create_subscription(user_id)
+        
+        self._create_usage_record(
+            subscription_id=subscription.id,
+            user_id=user_id,
+            usage_type="scheduled_post",
+            quantity=1
+        )
+        
+        return True
+    
+    # ==================== Dashboard / Stats ====================
+    
+    def get_usage_dashboard(self, user_id: int) -> Dict[str, Any]:
+        """Get comprehensive usage dashboard data"""
+        limits = self.get_user_limits(user_id)
+        usage = self.get_user_usage(user_id)
+        
+        # Calculate percentages
+        def calc_percent(used, limit):
+            if limit == "unlimited" or limit == -1:
+                return 0
+            if limit == 0:
+                return 100 if used > 0 else 0
+            return min(100, round((used / limit) * 100))
+        
+        return {
+            "subscription": {
+                "tier": limits["tier"],
+                "tier_name": limits["tier_name"],
+                "status": limits["status"]
+            },
+            "usage": {
+                "generations": {
+                    "used": usage["generations_used"],
+                    "limit": limits["generations_per_month"],
+                    "percent": calc_percent(usage["generations_used"], limits["generations_per_month"])
+                },
+                "brands": {
+                    "used": usage["brands_count"],
+                    "limit": limits["brands"],
+                    "percent": calc_percent(usage["brands_count"], limits["brands"])
+                },
+                "social_accounts": {
+                    "used": usage["social_accounts_count"],
+                    "limit": limits["social_accounts"],
+                    "percent": calc_percent(usage["social_accounts_count"], limits["social_accounts"])
+                },
+                "avatars": {
+                    "used": usage["lora_models_count"],
+                    "limit": limits["lora_models"],
+                    "percent": calc_percent(usage["lora_models_count"], limits["lora_models"])
+                },
+                "scheduled_posts": {
+                    "used": usage["scheduled_posts_count"],
+                    "limit": limits["scheduled_posts"],
+                    "percent": calc_percent(usage["scheduled_posts_count"], limits["scheduled_posts"])
+                }
+            },
+            "features": limits.get("features", []),
+            "upgrade_available": limits["tier"] != "agency"
+        }
+    
+    # ==================== Helper Methods ====================
+    
+    def _check_usage_reset(self, subscription: Subscription):
+        """Reset usage counters if new billing period"""
+        if subscription.generations_reset_at is None:
+            subscription.generations_reset_at = datetime.utcnow()
+            subscription.generations_used = 0
+            self.db.commit()
+            return
+        
+        # Check if 30 days have passed since last reset
+        days_since_reset = (datetime.utcnow() - subscription.generations_reset_at).days
+        if days_since_reset >= 30:
+            subscription.generations_used = 0
+            subscription.generations_reset_at = datetime.utcnow()
+            self.db.commit()
+            logger.info(f"Reset usage counters for user {subscription.user_id}")
+    
+    def _create_usage_record(
+        self,
+        subscription_id: int,
+        user_id: int,
+        usage_type: str,
+        quantity: int = 1,
+        metadata: Optional[Dict] = None
+    ):
+        """Create a usage record for tracking"""
+        try:
+            record = UsageRecord(
+                subscription_id=subscription_id,
+                user_id=user_id,
+                usage_type=usage_type,
+                quantity=quantity,
+                metadata=metadata
+            )
+            self.db.add(record)
+            self.db.commit()
+        except Exception as e:
+            logger.error(f"Failed to create usage record: {e}")
+            # Don't fail the main operation if usage tracking fails
+    
+    # ==================== Plan Upgrade ====================
+    
+    def can_upgrade_to(self, user_id: int, target_tier: SubscriptionTier) -> Dict[str, Any]:
+        """Check if user can upgrade to a specific tier"""
+        subscription = self.get_or_create_subscription(user_id)
+        
+        tier_order = [SubscriptionTier.FREE, SubscriptionTier.CREATOR, 
+                      SubscriptionTier.PRO, SubscriptionTier.AGENCY]
+        
+        current_index = tier_order.index(subscription.tier)
+        target_index = tier_order.index(target_tier)
+        
+        if target_index <= current_index:
+            return {
+                "allowed": False,
+                "reason": "Target tier is same or lower than current tier"
+            }
+        
+        target_limits = PLAN_LIMITS.get(target_tier)
+        
+        return {
+            "allowed": True,
+            "current_tier": subscription.tier.value,
+            "target_tier": target_tier.value,
+            "price_monthly": target_limits.get("price_monthly", 0),
+            "new_features": target_limits.get("features", [])
+        }
+    
+    def get_available_plans(self) -> Dict[str, Any]:
+        """Get all available subscription plans"""
+        plans = []
+        for tier, limits in PLAN_LIMITS.items():
+            plans.append({
+                "tier": tier.value,
+                "name": limits["name"],
+                "price_monthly": limits["price_monthly"],
+                "features": limits["features"],
+                "limits": {
+                    "generations_per_month": limits["generations_per_month"],
+                    "brands": limits["brands"],
+                    "lora_models": limits["lora_models"],
+                    "social_accounts": limits["social_accounts"],
+                    "scheduled_posts": limits["scheduled_posts"]
+                }
+            })
+        return {"plans": plans}
 
 
+# Factory function
 def get_billing_service(db: Session) -> BillingService:
     return BillingService(db)
