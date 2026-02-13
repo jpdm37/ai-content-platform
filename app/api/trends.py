@@ -4,13 +4,14 @@ Trend API Routes
 Handles trending topics scraped from various sources.
 Trends are linked to categories and used for content inspiration.
 """
-from typing import List, Optional
+from typing import List, Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from datetime import datetime, timedelta
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 import logging
+import json
 
 from app.core.database import get_db
 from app.auth.dependencies import get_current_user, get_current_verified_user
@@ -46,6 +47,25 @@ class TrendResponse(BaseModel):
     related_keywords: Optional[List[str]] = None
     scraped_at: Optional[datetime] = None
     expires_at: Optional[datetime] = None
+    
+    @field_validator('related_keywords', mode='before')
+    @classmethod
+    def parse_related_keywords(cls, v: Any) -> Optional[List[str]]:
+        """Handle related_keywords stored as JSON string or list"""
+        if v is None:
+            return None
+        if isinstance(v, list):
+            return v
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return parsed
+                return [str(parsed)]
+            except (json.JSONDecodeError, TypeError):
+                # If it's not valid JSON, treat as single keyword
+                return [v] if v else None
+        return None
     
     class Config:
         from_attributes = True
@@ -336,15 +356,15 @@ async def seed_demo_trends(
     
     for trend_data in SAMPLE_TRENDS:
         category_name = trend_data.get("category_name")
-        category_id = category_map.get(category_name)
+        cat_id = category_map.get(category_name)
         
-        if not category_id:
+        if not cat_id:
             continue
         
         # Check if trend already exists
         existing = db.query(Trend).filter(
             Trend.title == trend_data["title"],
-            Trend.category_id == category_id
+            Trend.category_id == cat_id
         ).first()
         
         if existing:
@@ -352,7 +372,7 @@ async def seed_demo_trends(
             continue
         
         trend = Trend(
-            category_id=category_id,
+            category_id=cat_id,
             title=trend_data["title"],
             description=trend_data.get("description"),
             source=trend_data.get("source", "demo"),
