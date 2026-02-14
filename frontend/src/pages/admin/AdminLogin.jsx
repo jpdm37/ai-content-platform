@@ -17,8 +17,9 @@ export default function AdminLogin() {
     
     try {
       const res = await adminApi.login({ email, password });
-      localStorage.setItem('adminToken', res.data.access_token);
-      localStorage.setItem('adminUser', JSON.stringify(res.data.admin));
+      // Save with correct key name that AdminDashboard expects
+      localStorage.setItem('admin_token', res.data.access_token);
+      localStorage.setItem('admin_user', JSON.stringify(res.data.admin));
       toast.success('Welcome to Admin Dashboard');
       navigate('/admin/dashboard');
     } catch (err) {
@@ -68,7 +69,7 @@ export default function AdminLogin() {
         </form>
 
         <p className="text-xs text-silver text-center mt-6">
-          First time? Use <code className="bg-slate px-1 rounded">/api/v1/admin/setup</code> to create your admin account.
+          First time? Use the <code className="bg-slate px-1 rounded">/docs</code> endpoint to create your admin account.
         </p>
       </Card>
     </div>
