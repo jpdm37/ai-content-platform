@@ -8,13 +8,14 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://ai-content-platform-kpc2.onrender.com';
+// Use base URL without /api/v1 suffix
+const API_BASE = (import.meta.env.VITE_API_URL || 'https://ai-content-platform-kpc2.onrender.com').replace(/\/api\/v1\/?$/, '');
 
 const adminFetch = async (endpoint, options = {}) => {
   const token = localStorage.getItem('admin_token');
   if (!token) throw new Error('Not authenticated');
   
-  const res = await fetch(`${API_URL}/api/v1${endpoint}`, {
+  const res = await fetch(`${API_BASE}/api/v1${endpoint}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -72,6 +73,22 @@ export default function AdminDashboard() {
         adminFetch('/admin/manage/announcements')
       ]);
       
+      // Log results for debugging
+      console.log('Admin API Results:', results.map((r, i) => ({
+        endpoint: ['/admin/stats', '/admin/manage/health', '/admin/manage/features', '/admin/users', '/admin/manage/tier-limits', '/admin/manage/announcements'][i],
+        status: r.status,
+        value: r.status === 'fulfilled' ? r.value : null,
+        error: r.status === 'rejected' ? r.reason?.message : null
+      })));
+      
+      // Show errors for failed requests
+      results.forEach((r, i) => {
+        if (r.status === 'rejected') {
+          const endpoints = ['stats', 'health', 'features', 'users', 'tier-limits', 'announcements'];
+          console.error(`Failed to load ${endpoints[i]}:`, r.reason);
+        }
+      });
+      
       setStats(results[0].status === 'fulfilled' ? results[0].value : null);
       setHealth(results[1].status === 'fulfilled' ? results[1].value : { status: 'unknown' });
       setFeatures(results[2].status === 'fulfilled' ? results[2].value : []);
@@ -79,6 +96,7 @@ export default function AdminDashboard() {
       setTierLimits(results[4].status === 'fulfilled' ? results[4].value : null);
       setAnnouncements(results[5].status === 'fulfilled' ? results[5].value : []);
     } catch (err) {
+      console.error('Load data error:', err);
       toast.error('Failed to load some data');
     }
     setLoading(false);
